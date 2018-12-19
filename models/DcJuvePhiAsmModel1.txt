@@ -1,0 +1,21 @@
+model
+{
+	for (i in 1:12){
+		h[i] ~ dlnorm(mu[i], tau)
+		mu[i] <- log(p[1] * u9[i] * pow(phi,-9) + 
+		            p[2] * u10[i] * pow(phi,-10) +
+		            p[3] * u11[i] * pow(phi,-11)  + 
+		            p[4] * u12[i] * pow(phi,-12))
+	}
+    	
+	p[1:4] ~ ddirch(alpha[1:4])
+	tau ~ dgamma(1000,1000)
+	phi ~ dbeta(13,42)
+	s <- 1/tau	
+
+	for (j in 1:4){
+	   #alpha[j] ~ dunif(0,1)
+	   alpha[j] <- 1.0
+	}
+  
+}
