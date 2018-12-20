@@ -70,7 +70,7 @@ data_list = list(N9 = N9,
 
 ```
 
-In the model, p is the proportion of neophytes in year y that hatched x years ago, where x is 9, 10, 11, or 12. These proportions don't add up to 1.0 because the number of neophytes at year y is a combination of hatchlings that survived 9-12 years (H(y-9) ... H(y-12)). The proportion (p(y,x)) is the proportion of N(y) that came from x years ago. 
+In the model, p is the proportion of neophytes in year y that hatched x years ago, where x is 9, 10, 11, or 12. These proportions add up to 1.0 because the number of neophytes at year y is a combination of hatchlings that survived 9-12 years (H(y-9) ... H(y-12)). The proportion (q(y,x)) is the proportion of N(y) that came from x years ago. 
 
 Then run the stan models.  First is the simplest: p-dot, phi-dot.
 ```{r}
@@ -82,12 +82,18 @@ mod_q_phi <- stan("models/Model_q_phi.stan",
                   cores = getOption("mc.cores", 8),
                   control = list(adapt_delta = 0.99))
 
+```
+
+Extract log likelihood and compute loo pareto stats.
+```{r}
+
 log_lik_q_phi <- extract_log_lik(mod_q_phi, 
                                  merge_chains = FALSE)
 rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
 loo(log_lik_q_phi, r_eff = rel_n_eff_q_phi, cores = 8)
 
 ```
+
 
 Look at the chains.
 ```{r}
