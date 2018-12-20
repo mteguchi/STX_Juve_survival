@@ -1,0 +1,354 @@
+---
+title: "Model testing with simulations"
+output: html_notebook
+---
+
+```{r}
+rm(list=ls())
+library(rstan)
+library(loo)
+```
+
+
+This document describes simulations and analysis of simulated data to check if the models and Stan code are correctly specified. In the simulations, the number of neophytes are assumed to be exact. Fixed proportions (qs) of neophytes that matured at ages 9, 10, 11, and 12 are used to derive the number of hatchling entering the ocean. Also, fixed annual survival rates are used to simulate the fate of these hatchlings over time. Derived data on the number of annual hatchlings are analyzed with models developed in Stan (used to be in JAGS) to determine if the correct estimates return. This is exactly the same as the hypothesized statistical model in the analysis. So, the results should be perfectly match the set parameters. 
+
+```{r}
+# setup the simulation parameters
+
+# Here are the raw data.
+dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
+
+# proportions mature at ages 9, 10, 11, and 12
+q.9 <- 0.1
+q.10 <- 0.2
+q.11 <- 0.4
+q.12 <- 0.3
+
+# avearge annual survival rate 
+phi <- 0.6
+
+```
+
+Using four cohorts of neophytes, the number of hatchlings is simulated with some error term.  
+
+```{r}
+neophytes <- rev(dat.0$Neophytes)
+sim.length <- length(neophytes) - 9
+hatchlings <- vector(mode = "numeric", length = sim.length)
+
+for (k in 4:sim.length) {
+  hatchlings[k-3] <- (neophytes[k] * q.9) * (phi^(-9)) + 
+    (neophytes[k-1] * q.10) * (phi^(-10)) + 
+    (neophytes[k-2] * q.11) * (phi^(-11)) + 
+    (neophytes[k-3] * q.12) * (phi^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
+}
+
+# the total number of neophytes is the sum of all these.
+
+```
+
+
+Once the data are created, fit the model to the data to see if we can get the "right" answer back.
+
+```{r}
+N9 <- neophytes[4:15]
+N10 <- neophytes[3:14]
+N11 <- neophytes[2:13]
+N12 <- neophytes[1:12]
+
+Y <- length(N12)
+H <- hatchlings[1:Y]
+data_list = list(N9 = N9, 
+                 N10 = N10, 
+                 N11 = N11, 
+                 N12 = N12,
+                 Y = Y, 
+                 H = H)
+
+```
+
+In the model, q is the proportion of neophytes in year y that hatched x years ago, where x is 9, 10, 11, or 12. These proportions add up to 1.0. 
+
+Then run the stan models.  First is the simplest: q-dot, phi-dot.
+```{r}
+mod_q_phi <- stan("models/Model_q_phi.stan", 
+                  data=data_list, 
+                  chains = 5, 
+                  warmup = 5000,
+                  iter = 10000,
+                  cores = getOption("mc.cores", 8),
+                  control = list(adapt_delta = 0.8))
+
+log_lik_q_phi <- extract_log_lik(mod_q_phi, 
+                                 merge_chains = FALSE)
+rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
+loo(log_lik_q_phi, 
+    r_eff = rel_n_eff_q_phi, cores = 8)
+
+```
+
+Look at the chains.
+```{r}
+traceplot(mod_p_phi, pars = "q")
+```
+
+```{r}
+traceplot(mod_p_phi, pars = c("phi"))
+```
+
+```{r}
+traceplot(mod_p_phi, pars = "sigma")
+
+```
+
+
+
+Look at the summary statistics.
+```{r}
+print(mod_p_phi)
+```
+
+Then look at the posteriors of log-hatchling numbers.
+
+```{r}
+list_of_samples <- extract(mod_p_phi)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1982:1993
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+hatch.yrs <- 1982:1993
+obs.H <- data.frame(year = hatch.yrs, H = H)
+
+ggplot() + geom_boxplot(data = mus2,
+                        aes(x = variable, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)
+
+```
+
+
+Next model has time-specific p but constant phi. 
+
+```{r}
+# setup the simulation parameters
+
+# proportions mature at ages 9, 10, 11, and 12
+library(gtools)
+qs <- rdirichlet(n = sim.length, alpha = c(2,2,5,4))
+
+# avearge annual survival rate 
+phi <- 0.6
+
+```
+
+For each cohort of neophytes, they are separated into those who hatched 9, 10, 11, or 12 years ago. 
+
+```{r}
+hatchlings <- vector(mode = "numeric", length = sim.length)
+
+for (k in 4:sim.length) {
+  hatchlings[k-3] <- (neophytes[k] * qs[k,1]) * (phi^(-9)) + 
+    (neophytes[k-1] * qs[k,2]) * (phi^(-10)) + 
+    (neophytes[k-2] * qs[k,3]) * (phi^(-11)) + 
+    (neophytes[k-3] * qs[k,4]) * (phi^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
+}
+
+N9 <- neophytes[4:15]
+N10 <- neophytes[3:14]
+N11 <- neophytes[2:13]
+N12 <- neophytes[1:12]
+
+Y <- length(N12)
+H <- hatchlings[1:Y]
+data_list = list(N9 = N9, 
+                 N10 = N10, 
+                 N11 = N11, 
+                 N12 = N12,
+                 Y = Y, 
+                 H = H)
+
+
+```
+
+```{r}
+
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod_qt_phi <- stan("models/Model_qt_phi.stan", 
+                   data=data_list, 
+                   chains = 5, 
+                   warmup = 5000,
+                   iter = 10000,
+                   cores = getOption("mc.cores", 8),
+                   control = list(adapt_delta = 0.99))
+
+log_lik_qt_phi <- extract_log_lik(mod_qt_phi, merge_chains = FALSE)
+rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
+loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 8)
+
+```
+
+
+```{r}
+traceplot(mod_qt_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+```
+```{r}
+
+traceplot(mod_qt_phi, pars = c("phi"))
+```
+
+```{r}
+traceplot(mod_qt_phi, pars = "sigma")
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod_qt_phi)
+
+```
+
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- extract(mod_qt_phi)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1982:1993
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+hatch.yrs <- 1982:1993
+obs.H <- data.frame(year = hatch.yrs, H = H)
+
+ggplot() + geom_boxplot(data = mus2,
+                        aes(x = variable, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)
+
+
+```
+
+
+Now try phi_t
+
+```{r}
+# setup the simulation parameters
+
+# proportions mature at ages 9, 10, 11, and 12
+q.9 <- 0.1
+q.10 <- 0.2
+q.11 <- 0.4
+q.12 <- 0.3
+
+neophytes <- rev(dat.0$Neophytes)
+sim.length <- length(neophytes) - 9
+hatchlings <- vector(mode = "numeric", length = sim.length)
+
+# avearge annual survival rate 
+phi <- rbeta(n = sim.length, shape1 = 3, shape2 = 3)
+
+```
+
+Using four cohorts of neophytes, the number of hatchlings is simulated with some error term.  
+
+```{r}
+
+for (k in 4:sim.length) {
+  hatchlings[k-3] <- (neophytes[k] * q.9) * (phi[k]^(-9)) + 
+    (neophytes[k-1] * q.10) * (phi[k]^(-10)) + 
+    (neophytes[k-2] * q.11) * (phi[k]^(-11)) + 
+    (neophytes[k-3] * q.12) * (phi[k]^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
+}
+
+N9 <- neophytes[4:15]
+N10 <- neophytes[3:14]
+N11 <- neophytes[2:13]
+N12 <- neophytes[1:12]
+
+Y <- length(N12)
+H <- hatchlings[1:Y]
+data_list = list(N9 = N9, 
+                 N10 = N10, 
+                 N11 = N11, 
+                 N12 = N12,
+                 Y = Y, 
+                 H = H)
+```
+
+
+```{r}
+
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod_q_phit <- stan("models/Model_q_phit.stan", 
+                   data=data_list, 
+                   chains = 5, 
+                   warmup = 5000,
+                   iter = 10000,
+                   cores = getOption("mc.cores", 8),
+                   control = list(adapt_delta = 0.99))
+
+log_lik_q_phit <- extract_log_lik(mod_q_phit, merge_chains = FALSE)
+rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
+loo(log_lik_q_phit, r_eff = rel_n_eff_q_phit, cores = 8)
+
+```
+
+
+```{r}
+traceplot(mod_q_phit, pars = c("q"))
+```
+
+```{r}
+
+traceplot(mod_q_phit, pars = c("phi"))
+```
+
+```{r}
+traceplot(mod_q_phit, pars = "sigma")
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod_q_phit)
+
+```
+
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- extract(mod_q_phit)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1982:1993
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+hatch.yrs <- 1982:1993
+obs.H <- data.frame(year = hatch.yrs, H = H)
+
+ggplot() + geom_boxplot(data = mus2,
+                        aes(x = variable, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)
+
+
+```

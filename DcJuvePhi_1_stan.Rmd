@@ -55,12 +55,13 @@ data_list = list(N9 = N9, N10 = N10, N11 = N11, N12 = N12,
                  Y = Y, H = H)
 
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod = stan("models/DcJuvePhiAsmModel1.stan", 
+mod = stan("models/Model_p_phi.stan", 
            data=data_list, 
            chains = 5, 
            warmup = 5000,
            iter = 10000,
-           cores = getOption("mc.cores", 8))
+           cores = getOption("mc.cores", 8),
+           control = list(adapt_delta = 0.99))
 
 log_lik1 <- extract_log_lik(mod, merge_chains = FALSE)
 rel_n_eff <- relative_eff(exp(log_lik1))
@@ -72,6 +73,9 @@ To see trace plots, use taceplot.
 ```{r}
 #traceplot(mod, pars = c("p[1,1]", "p[1,2]", "p[1,3]", "p[1,4]"))
 traceplot(mod, pars = "p")
+```
+
+```{r}
 traceplot(mod, pars = c("phi"))
 
 ```
@@ -107,5 +111,64 @@ ggplot() + geom_boxplot(data = mus2,
 
 ```
 
+Try with time-variable phi
+
+```{r}
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod <- stan("models/Model_p_phit.stan", 
+            data=data_list, 
+            chains = 5, 
+            warmup = 5000,
+            iter = 10000,
+            cores = getOption("mc.cores", 8),
+            control = list(adapt_delta = 0.99))
+
+log_lik1 <- extract_log_lik(mod, merge_chains = FALSE)
+rel_n_eff <- relative_eff(exp(log_lik1))
+loo(log_lik1, r_eff = rel_n_eff, cores = 8)
+```
+
+To see trace plots, use taceplot.
+
+```{r}
+#traceplot(mod, pars = c("p[1,1]", "p[1,2]", "p[1,3]", "p[1,4]"))
+traceplot(mod, pars = "p")
+```
+
+```{r}
+traceplot(mod, pars = c("phi"))
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod)
+
+```
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- extract(mod)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1982:1993
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+obs.H <- data.frame(year = hatch.yrs, H = H)
+
+ggplot() + geom_boxplot(data = mus2,
+                        aes(x = variable, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)
+
+
+```
 
 

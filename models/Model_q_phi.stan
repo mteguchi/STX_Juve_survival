@@ -10,31 +10,20 @@ data {
 
 parameters {
 	real<lower=0, upper = 10> sigma;    // standard deviation of log-normal hatchling counts
-	//real<lower=0, upper = 1.0> phi[Y];     // annual average survival rates for juveniles
 	real<lower=0, upper = 1.0> phi;     // annual average survival rates for juveniles
-	//real<lower=0, upper = 1.0> p[4];    // proportions of neophytes that hatched x yeas ago, x = 9-12 years
-	real<lower=0, upper=1.0> p[Y, 4];
+	//real<lower=0, upper = 1.0> q[4];    // proportions of neophytes that hatched x yeas ago, x = 9-12 years
+	simplex[4] q;
 }
 
 transformed parameters {
-	real alpha = 1.0;        // Dirichlet prior parameters
 	real<lower=0> mu[Y];     // the log-mean of the # hatchlings 
-	
+	real<lower=0> alpha = 1.0;   // dirichlet parameters
+
 	for (i in 1:Y){
-		mu[i] = log(p[i, 1] * N9[i] * pow(phi,-9) + 
-		             p[i, 2] * N10[i] * pow(phi,-10) +
-		             p[i, 3] * N11[i] * pow(phi,-11) + 
-		             p[i, 4] * N12[i] * pow(phi,-12)); 
-
-		/*mu[i] = log( p[1] * N9[i] * pow(phi[i],-9) + 
-		             p[2] * N10[i] * pow(phi[i],-10) +
-		            p[3] * N11[i] * pow(phi[i],-11) + 
-		            p[4] * N12[i] * pow(phi[i],-12)); */
-
-		/*mu[i] = log(p[1] * N9[i] * pow(phi,-9) + 
-		            p[2] * N10[i] * pow(phi,-10) +
-		            p[3] * N11[i] * pow(phi,-11) + 
-		            p[4] * N12[i] * pow(phi,-12));  */
+		mu[i] = log(q[1] * N9[i] * pow(phi,-9) + 
+		            q[2] * N10[i] * pow(phi,-10) +
+		            q[3] * N11[i] * pow(phi,-11) + 
+		            q[4] * N12[i] * pow(phi,-12));  
 	}	
 
 	
@@ -46,17 +35,11 @@ model
 	sigma ~ uniform(0 , 10);
 	phi ~ beta(1,1);
 
-	//for (i in 1:4){
-	//	p[i] ~ beta(1, 1);
-	//}
+	q ~ dirichlet(rep_vector(alpha, 4));
 
 	for (i in 1:Y){
-		//phi[i] ~ beta(1,1);
 		H[i] ~ lognormal(mu[i], sigma);
-		for (j in 1:4){
-			p[i, j] ~ beta(1, 1);
-		}
-
+		
 	}
   
 }
