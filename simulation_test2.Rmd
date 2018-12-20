@@ -79,6 +79,11 @@ mod_q_phi <- stan("models/Model_q_phi.stan",
                   cores = getOption("mc.cores", 8),
                   control = list(adapt_delta = 0.8))
 
+```
+
+Extract log likelihood and run loo.
+
+```{r}
 log_lik_q_phi <- extract_log_lik(mod_q_phi, 
                                  merge_chains = FALSE)
 rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
@@ -87,17 +92,18 @@ loo(log_lik_q_phi,
 
 ```
 
+
 Look at the chains.
 ```{r}
-traceplot(mod_p_phi, pars = "q")
+traceplot(mod_q_phi, pars = "q")
 ```
 
 ```{r}
-traceplot(mod_p_phi, pars = c("phi"))
+traceplot(mod_q_phi, pars = c("phi"))
 ```
 
 ```{r}
-traceplot(mod_p_phi, pars = "sigma")
+traceplot(mod_q_phi, pars = "sigma")
 
 ```
 
@@ -105,13 +111,13 @@ traceplot(mod_p_phi, pars = "sigma")
 
 Look at the summary statistics.
 ```{r}
-print(mod_p_phi)
+print(mod_q_phi)
 ```
 
 Then look at the posteriors of log-hatchling numbers.
 
 ```{r}
-list_of_samples <- extract(mod_p_phi)
+list_of_samples <- extract(mod_q_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
@@ -133,7 +139,7 @@ ggplot() + geom_boxplot(data = mus2,
 ```
 
 
-Next model has time-specific p but constant phi. 
+Next model has time-specific q but constant phi. In this case, the data structure is changed because qs need to be selected from each possible year, even though not all neophytes counts are available. In other words, in the previous setting, N9, N10, N11, and N12 were vectors of an equal length (Y), where the starting values were lagged, N12[1] = N11[2] = N10[3] = N9[4], for example. It was fine because q was time invariant, so that q(x) for x = 9, 10, 11, and 12, summed to 1.0. When q is time dependent (q(x,t)), H(t) = q(9, t+9)N(t+9) + q(10, t+10)N(t+10) + q(11, t+11)N(t+11) + q(12, t+12)N(t+12).  So, q values are needed for all possible N values, where q(9,t) + q(10,t) + q(11,t) + q(12,t) = 1.0. 
 
 ```{r}
 # setup the simulation parameters
@@ -152,24 +158,22 @@ For each cohort of neophytes, they are separated into those who hatched 9, 10, 1
 ```{r}
 hatchlings <- vector(mode = "numeric", length = sim.length)
 
+# when the qs are time dependent, their indices have to match the neophytes indices. Note that in this case, qs don't add up to 1.0. 
 for (k in 4:sim.length) {
   hatchlings[k-3] <- (neophytes[k] * qs[k,1]) * (phi^(-9)) + 
-    (neophytes[k-1] * qs[k,2]) * (phi^(-10)) + 
-    (neophytes[k-2] * qs[k,3]) * (phi^(-11)) + 
-    (neophytes[k-3] * qs[k,4]) * (phi^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
+    (neophytes[k-1] * qs[k-1,2]) * (phi^(-10)) + 
+    (neophytes[k-2] * qs[k-2,3]) * (phi^(-11)) + 
+    (neophytes[k-3] * qs[k-3,4]) * (phi^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
 }
 
-N9 <- neophytes[4:15]
-N10 <- neophytes[3:14]
-N11 <- neophytes[2:13]
-N12 <- neophytes[1:12]
+# N9 <- neophytes[4:15]
+# N10 <- neophytes[3:14]
+# N11 <- neophytes[2:13]
+# N12 <- neophytes[1:12]
 
-Y <- length(N12)
+Y <- sim.length - 3
 H <- hatchlings[1:Y]
-data_list = list(N9 = N9, 
-                 N10 = N10, 
-                 N11 = N11, 
-                 N12 = N12,
+data_list = list(N = neophytes[1:sim.length],
                  Y = Y, 
                  H = H)
 
@@ -187,11 +191,17 @@ mod_qt_phi <- stan("models/Model_qt_phi.stan",
                    cores = getOption("mc.cores", 8),
                    control = list(adapt_delta = 0.99))
 
+```
+
+Extract log likelihood and run loo.
+```{r}
 log_lik_qt_phi <- extract_log_lik(mod_qt_phi, merge_chains = FALSE)
 rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
 loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 8)
 
+
 ```
+
 
 
 ```{r}
@@ -218,7 +228,7 @@ print(mod_qt_phi)
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- extract(mod_qt_phi)
+list_of_samples <- rstan::extract(mod_qt_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
@@ -252,8 +262,6 @@ q.10 <- 0.2
 q.11 <- 0.4
 q.12 <- 0.3
 
-neophytes <- rev(dat.0$Neophytes)
-sim.length <- length(neophytes) - 9
 hatchlings <- vector(mode = "numeric", length = sim.length)
 
 # avearge annual survival rate 
@@ -299,6 +307,11 @@ mod_q_phit <- stan("models/Model_q_phit.stan",
                    cores = getOption("mc.cores", 8),
                    control = list(adapt_delta = 0.99))
 
+
+```
+
+Extract log likelihood and run loo.
+```{r}
 log_lik_q_phit <- extract_log_lik(mod_q_phit, merge_chains = FALSE)
 rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
 loo(log_lik_q_phit, r_eff = rel_n_eff_q_phit, cores = 8)

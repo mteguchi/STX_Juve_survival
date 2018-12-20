@@ -1,0 +1,117 @@
+---
+title: "Expanding the range of age at first reproduction in the q-phi model"
+output: html_notebook
+---
+
+
+```{r}
+rm(list=ls())
+library(rstan)
+library(loo)
+library(tidyverse)
+#set.seed(1)
+```
+
+Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
+
+In the previous analysis, four groups were used as possible age at first reproduction:  9, 10, 11, and 12 years. This analysis extends it to younger ages so that the average AFR may be estimated. 
+
+Set up the dataset first.
+```{r}
+
+dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
+
+max.yr <- dat.0$Year[nrow(dat.0)] - 12
+hatchlings <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + 6
+# the number of neophytes:
+neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+
+Y <- length(hatchlings)  
+hatch.yrs <- dat.0$Year[1:Y]
+```
+
+Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(xs), where x = 9, 10, 11, or 12) are assumed equal.  Annual average survival rates are also assumed equal. 
+
+```{r}
+data_list = list(N = neophytes,
+                 Y = Y, 
+                 H = hatchlings,
+                 n_ages = 6)
+
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
+                 data=data_list, 
+                 chains = 5, 
+                 warmup = 5000,
+                 iter = 10000,
+                 cores = getOption("mc.cores", 4),
+                 control = list(adapt_delta = 0.99))
+
+```
+
+Extract the log-likelihood and run the loo.
+```{r}
+log_lik_qt_phi <- extract_log_lik(mod_qt_phi, merge_chains = FALSE)
+rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
+loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 4)
+
+```
+
+To see trace plots, use taceplot.
+
+```{r}
+traceplot(mod_q_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+
+```
+
+```{r}
+traceplot(mod_qt_phi, pars = c("phi"))
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod_qt_phi)
+
+```
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- rstan::extract(mod_qt_phi)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, c(1982:1993))
+
+# mus <- as.data.frame(list_of_samples$mu)
+# colnames(mus) <- 1982:1993
+# mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+obs.H <- data.frame(year = hatch.yrs, H = hatchlings)
+
+ggplot() + geom_boxplot(data = mus2,
+                        aes(x = year, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)+ 
+  labs(x = "", y = "ln(hatchlings)")
+#print(p.q.phi)
+# ggsave(filename = "figures/logHatch_q_phi.png",
+#        device = "png", dpi = 600,
+#        plot = p.q.phi)
+
+```
+
+
+The plot suggests something is not quite right... to be continued. 2018-12-20

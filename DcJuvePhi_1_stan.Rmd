@@ -8,6 +8,7 @@ output: html_notebook
 rm(list=ls())
 library(rstan)
 library(loo)
+library(tidyverse)
 #set.seed(1)
 ```
 
@@ -39,6 +40,8 @@ N12 <- c(45, 90,
 
 Y <- length(N12)
 
+N <- c(N9, 26, 30, 13)
+
 # Hatchlings end at 1993 - 12 years prior to the most recent (2005)
 # 1982:1993
 H <- c(8063, 10013, 
@@ -48,127 +51,341 @@ H <- c(8063, 10013,
 hatch.yrs <- 1982:1993
 ```
 
-Set up the stan input.
+Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(xs), where x = 9, 10, 11, or 12) are assumed equal.  Annual average survival rates are also assumed equal. 
 
 ```{r}
 data_list = list(N9 = N9, N10 = N10, N11 = N11, N12 = N12,
                  Y = Y, H = H)
 
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod = stan("models/Model_p_phi.stan", 
-           data=data_list, 
-           chains = 5, 
-           warmup = 5000,
-           iter = 10000,
-           cores = getOption("mc.cores", 8),
-           control = list(adapt_delta = 0.99))
+mod_q_phi <- stan("models/Model_q_phi.stan", 
+                 data=data_list, 
+                 chains = 5, 
+                 warmup = 5000,
+                 iter = 10000,
+                 cores = getOption("mc.cores", 4),
+                 control = list(adapt_delta = 0.99))
 
-log_lik1 <- extract_log_lik(mod, merge_chains = FALSE)
-rel_n_eff <- relative_eff(exp(log_lik1))
-loo(log_lik1, r_eff = rel_n_eff, cores = 8)
+```
+
+Extract the log-likelihood and run the loo.
+```{r}
+log_lik_q_phi <- extract_log_lik(mod_q_phi, merge_chains = FALSE)
+rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
+loo(log_lik_q_phi, r_eff = rel_n_eff_q_phi, cores = 4)
+
 ```
 
 To see trace plots, use taceplot.
 
 ```{r}
 #traceplot(mod, pars = c("p[1,1]", "p[1,2]", "p[1,3]", "p[1,4]"))
-traceplot(mod, pars = "p")
+traceplot(mod_q_phi, pars = "q")
 ```
 
 ```{r}
-traceplot(mod, pars = c("phi"))
+traceplot(mod_q_phi, pars = c("phi"))
 
 ```
 
 To see a summary of estimated paramters use print.
 ```{r}
 # to see Rhat and other stats, use print
-print(mod)
+print(mod_q_phi)
 
 ```
 
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- extract(mod)
+list_of_samples <- rstan::extract(mod_q_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1982:1993
-mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+colnames(mus) <- 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, c(1982:1993))
+
+# mus <- as.data.frame(list_of_samples$mu)
+# colnames(mus) <- 1982:1993
+# mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
-obs.H <- data.frame(year = hatch.yrs, H = H)
+obs.H <- data.frame(year = hatch.yrs, H = rev(H))
 
-ggplot() + geom_boxplot(data = mus2,
-                        aes(x = variable, 
+p.q.phi <- ggplot() + geom_boxplot(data = mus2,
+                        aes(x = year, 
                             y = log_hatchlings)) + 
   geom_point(data = obs.H,
              aes(x = as.factor(year), 
                  y = log(H)),
-             color = "red", size = 3)
+             color = "red", size = 3)+ 
+  labs(x = "", y = "ln(hatchlings)")
 
+ggsave(filename = "figures/logHatch_q_phi.png",
+       device = "png", dpi = 600,
+       plot = p.q.phi)
 
 ```
 
-Try with time-variable phi
+Make the surival rate to be time varying. 
 
 ```{r}
+data_list = list(N9 = N9, N10 = N10, N11 = N11, N12 = N12,
+                 Y = Y, H = H)
+
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod <- stan("models/Model_p_phit.stan", 
-            data=data_list, 
-            chains = 5, 
-            warmup = 5000,
-            iter = 10000,
-            cores = getOption("mc.cores", 8),
-            control = list(adapt_delta = 0.99))
+mod_q_phit <- stan("models/Model_q_phit.stan", 
+                 data=data_list, 
+                 chains = 5, 
+                 warmup = 5000,
+                 iter = 10000,
+                 cores = getOption("mc.cores", 4),
+                 control = list(adapt_delta = 0.99))
 
-log_lik1 <- extract_log_lik(mod, merge_chains = FALSE)
-rel_n_eff <- relative_eff(exp(log_lik1))
-loo(log_lik1, r_eff = rel_n_eff, cores = 8)
 ```
+
+Extract the log-likelihood and run the loo.
+```{r}
+log_lik_q_phit <- extract_log_lik(mod_q_phit, 
+                                  merge_chains = FALSE)
+rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
+loo(log_lik_q_phit, r_eff = rel_n_eff_q_phit, cores = 4)
+
+```
+
 
 To see trace plots, use taceplot.
 
 ```{r}
-#traceplot(mod, pars = c("p[1,1]", "p[1,2]", "p[1,3]", "p[1,4]"))
-traceplot(mod, pars = "p")
+traceplot(mod_q_phit, pars = "q")
 ```
 
 ```{r}
-traceplot(mod, pars = c("phi"))
+traceplot(mod_q_phit, pars = c("phi"))
 
 ```
+
+```{r}
+traceplot(mod_q_phit, pars = "sigma")
+```
+
 
 To see a summary of estimated paramters use print.
 ```{r}
 # to see Rhat and other stats, use print
-print(mod)
+print(mod_q_phit)
 
 ```
 
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- extract(mod)
+list_of_samples <- rstan::extract(mod_q_phit)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1982:1993
-mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+colnames(mus) <- 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, c(1982:1993))
+
+# mus <- as.data.frame(list_of_samples$mu)
+# colnames(mus) <- 1982:1993
+# mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
-obs.H <- data.frame(year = hatch.yrs, H = H)
+obs.H <- data.frame(year = hatch.yrs, H = rev(H))
 
-ggplot() + geom_boxplot(data = mus2,
-                        aes(x = variable, 
+p.q.phit <- ggplot() + geom_boxplot(data = mus2,
+                                    aes(x = year, 
+                                        y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3) + 
+  labs(x = "", y = "ln(hatchlings)")
+
+ggsave(filename = "figures/logHatch_q_phit.png",
+       device = "png", dpi = 600,
+       plot = p.q.phit)
+```
+
+Varying the survival rates add more spread in the sigma parameter... 
+
+Try with time-variable q
+
+```{r}
+data_list = list(N = N,
+                 Y = Y, H = H)
+
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod_qt_phi <- stan("models/Model_qt_phi.stan", 
+                   data=data_list, 
+                   chains = 5, 
+                   warmup = 5000,
+                   iter = 10000,
+                   cores = getOption("mc.cores", 4),
+                   control = list(adapt_delta = 0.99))
+
+```
+
+Get the log likelihood and run the loo.
+
+```{r}
+log_lik_qt_phi <- extract_log_lik(mod_qt_phi, 
+                                  merge_chains = FALSE)
+rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
+loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 4)
+
+```
+
+
+To see trace plots, use taceplot.
+
+```{r}
+traceplot(mod_qt_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+
+```
+
+```{r}
+traceplot(mod_qt_phi, pars = c("phi"))
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod_qt_phi)
+
+```
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- rstan::extract(mod_qt_phi)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, c(1982:1993))
+
+# mus <- as.data.frame(list_of_samples$mu)
+# colnames(mus) <- 1982:1993
+# mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+obs.H <- data.frame(year = hatch.yrs, H = rev(H))
+
+p.qt.phi <- ggplot() + geom_boxplot(data = mus2,
+                        aes(x = year, 
                             y = log_hatchlings)) + 
   geom_point(data = obs.H,
              aes(x = as.factor(year), 
                  y = log(H)),
-             color = "red", size = 3)
+             color = "red", size = 3) + 
+  labs(x = "", y = "ln(hatchlings)")
 
+ggsave(filename = "figures/logHatch_qt_phi.png",
+       device = "png", dpi = 600,
+       plot = p.qt.phi)
 
 ```
+
+Next qt and phit
+
+```{r}
+data_list = list(N = N,
+                 Y = Y, H = H)
+
+#n.cores <- options(mc.cores = parallel::detectCores())
+mod_qt_phit <- stan("models/Model_qt_phit.stan", 
+                   data=data_list, 
+                   chains = 5, 
+                   warmup = 5000,
+                   iter = 10000,
+                   cores = getOption("mc.cores", 4),
+                   control = list(adapt_delta = 0.99))
+
+```
+
+Get the log likelihood and run the loo.
+
+```{r}
+log_lik_qt_phit <- extract_log_lik(mod_qt_phit, 
+                                  merge_chains = FALSE)
+rel_n_eff_qt_phit <- relative_eff(exp(log_lik_qt_phit))
+loo(log_lik_qt_phit, r_eff = rel_n_eff_qt_phit, cores = 4)
+
+```
+
+
+To see trace plots, use taceplot.
+
+```{r}
+traceplot(mod_qt_phit, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+
+```
+
+```{r}
+traceplot(mod_qt_phit, pars = c("sigma"))
+
+```
+
+
+```{r}
+traceplot(mod_qt_phit, pars = c("phi"))
+
+```
+
+To see a summary of estimated paramters use print.
+```{r}
+# to see Rhat and other stats, use print
+print(mod_qt_phit)
+
+```
+
+Plot the data and predicted to see how they compare.
+
+```{r}
+list_of_samples <- rstan::extract(mod_qt_phit)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, c(1982:1993))
+
+# mus <- as.data.frame(list_of_samples$mu)
+# colnames(mus) <- 1982:1993
+# mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
+
+# then the observed counts here:
+obs.H <- data.frame(year = hatch.yrs, H = rev(H))
+
+p.qt.phit <- ggplot() + geom_boxplot(data = mus2,
+                        aes(x = year, 
+                            y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)+ 
+  labs(x = "", y = "ln(hatchlings)")
+
+ggsave(filename = "figures/logHatch_qt_phit.png",
+       device = "png", dpi = 600,
+       plot = p.qt.phit)
+
+```
+
+This model seems to have a too large of sigma estimates... 
 
 
