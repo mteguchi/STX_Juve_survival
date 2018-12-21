@@ -9,7 +9,13 @@ rm(list=ls())
 library(rstan)
 library(loo)
 library(tidyverse)
-#set.seed(1)
+
+save.fig <- T
+#set.seed(10)
+n.cores <- parallel::detectCores()
+MCMC.warmup <- 5000
+MCMC.iter <- 10000
+MCMC.chains <- ifelse(n.cores < 5, n.cores, 5)
 ```
 
 Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
@@ -21,15 +27,24 @@ Set up the dataset first.
 
 dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
-max.yr <- dat.0$Year[nrow(dat.0)] - 12
-hatchlings <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+# maximum age of first reproduction
+max.age <- 12
+# the number of age classes for the first reproduction 
+n.ages <- 6   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
 
-min.yr <- dat.0$Year[1] + 6
+min.age <- max.age - n.ages + 1
+
+# set up the data
+max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + min.age
 # the number of neophytes:
 neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
 
-Y <- length(hatchlings)  
+Y <- length(H)  
 hatch.yrs <- dat.0$Year[1:Y]
+
 ```
 
 Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(xs), where x = 9, 10, 11, or 12) are assumed equal.  Annual average survival rates are also assumed equal. 
@@ -37,16 +52,16 @@ Set up the stan input. First model is q-dot and phi-dot, where the proportion of
 ```{r}
 data_list = list(N = neophytes,
                  Y = Y, 
-                 H = hatchlings,
-                 n_ages = 6)
+                 H = H,
+                 n_ages = n.ages,
+                 max_age = max.age)
 
-#n.cores <- options(mc.cores = parallel::detectCores())
 mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
                  data=data_list, 
-                 chains = 5, 
-                 warmup = 5000,
-                 iter = 10000,
-                 cores = getOption("mc.cores", 4),
+                 chains = MCMC.chains, 
+                 warmup = MCMC.warmup,
+                 iter = MCMC.iter,
+                 cores = getOption("mc.cores", MCMC.chains),
                  control = list(adapt_delta = 0.99))
 
 ```
@@ -62,7 +77,7 @@ loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 4)
 To see trace plots, use taceplot.
 
 ```{r}
-traceplot(mod_q_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+traceplot(mod_qt_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
 
 ```
 
@@ -96,20 +111,23 @@ mus2$year <- factor(mus2$year, c(1982:1993))
 # mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
-obs.H <- data.frame(year = hatch.yrs, H = hatchlings)
+obs.H <- data.frame(year = hatch.yrs, H = H)
 
-ggplot() + geom_boxplot(data = mus2,
-                        aes(x = year, 
-                            y = log_hatchlings)) + 
+p.qt.phi <- ggplot() + geom_boxplot(data = mus2,
+                                    aes(x = year, 
+                                        y = log_hatchlings)) + 
   geom_point(data = obs.H,
              aes(x = as.factor(year), 
                  y = log(H)),
              color = "red", size = 3)+ 
   labs(x = "", y = "ln(hatchlings)")
-#print(p.q.phi)
-# ggsave(filename = "figures/logHatch_q_phi.png",
-#        device = "png", dpi = 600,
-#        plot = p.q.phi)
+
+print(p.qt.phi)
+if (save.fig)
+  ggsave(filename = paste0("figures/logHatch_qt_phi_maxAge_", 
+                           max.age, "_nAges_", n.ages, ".png"),
+         device = "png", dpi = 600,
+         plot = p.qt.phi)
 
 ```
 

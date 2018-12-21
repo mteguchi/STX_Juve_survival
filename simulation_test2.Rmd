@@ -7,6 +7,7 @@ output: html_notebook
 rm(list=ls())
 library(rstan)
 library(loo)
+set.seed(10)
 ```
 
 
@@ -27,14 +28,31 @@ q.12 <- 0.3
 # avearge annual survival rate 
 phi <- 0.6
 
+# maximum age of first reproduction
+max.age <- 12
+# the number of age classes for the first reproduction 
+n.ages <- 4   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
+
+min.age <- max.age - n.ages + 1
 ```
 
 Using four cohorts of neophytes, the number of hatchlings is simulated with some error term.  
 
 ```{r}
-neophytes <- rev(dat.0$Neophytes)
-sim.length <- length(neophytes) - 9
-hatchlings <- vector(mode = "numeric", length = sim.length)
+# set up the data
+max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + min.age
+# the number of neophytes:
+neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+
+Y <- length(H)  
+hatch.yrs <- dat.0$Year[1:Y]
+
+# neophytes <- rev(dat.0$Neophytes)
+sim.length <- length(neophytes)
+hatchlings <- vector(mode = "numeric", length = length(H))
 
 for (k in 4:sim.length) {
   hatchlings[k-3] <- (neophytes[k] * q.9) * (phi^(-9)) + 
@@ -43,27 +61,31 @@ for (k in 4:sim.length) {
     (neophytes[k-3] * q.12) * (phi^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
 }
 
-# the total number of neophytes is the sum of all these.
-
 ```
 
 
 Once the data are created, fit the model to the data to see if we can get the "right" answer back.
 
 ```{r}
-N9 <- neophytes[4:15]
-N10 <- neophytes[3:14]
-N11 <- neophytes[2:13]
-N12 <- neophytes[1:12]
+# N9 <- neophytes[4:15]
+# N10 <- neophytes[3:14]
+# N11 <- neophytes[2:13]
+# N12 <- neophytes[1:12]
+# 
+# Y <- length(N12)
+# H <- hatchlings[1:Y]
+# data_list = list(N9 = N9, 
+#                  N10 = N10, 
+#                  N11 = N11, 
+#                  N12 = N12,
+#                  Y = Y, 
+#                  H = H)
 
-Y <- length(N12)
-H <- hatchlings[1:Y]
-data_list = list(N9 = N9, 
-                 N10 = N10, 
-                 N11 = N11, 
-                 N12 = N12,
+data_list = list(N = neophytes,
                  Y = Y, 
-                 H = H)
+                 H = hatchlings,
+                 n_ages = 4,
+                 max_age = 12)
 
 ```
 
@@ -71,13 +93,23 @@ In the model, q is the proportion of neophytes in year y that hatched x years ag
 
 Then run the stan models.  First is the simplest: q-dot, phi-dot.
 ```{r}
-mod_q_phi <- stan("models/Model_q_phi.stan", 
+# This is the old version with inputs N9, ..., N12
+# mod_q_phi <- stan("models/Model_q_phi.stan", 
+#                   data=data_list, 
+#                   chains = 5, 
+#                   warmup = 5000,
+#                   iter = 10000,
+#                   cores = getOption("mc.cores", 8),
+#                   control = list(adapt_delta = 0.8))
+
+# This is the new version with flexible n.ages. 
+mod_q_phi <- stan("models/Model_q_phi_1.stan", 
                   data=data_list, 
                   chains = 5, 
                   warmup = 5000,
                   iter = 10000,
                   cores = getOption("mc.cores", 8),
-                  control = list(adapt_delta = 0.8))
+                  control = list(adapt_delta = 0.9))
 
 ```
 
@@ -117,7 +149,7 @@ print(mod_q_phi)
 Then look at the posteriors of log-hatchling numbers.
 
 ```{r}
-list_of_samples <- extract(mod_q_phi)
+list_of_samples <- rstan::extract(mod_q_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
@@ -126,7 +158,7 @@ mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
 hatch.yrs <- 1982:1993
-obs.H <- data.frame(year = hatch.yrs, H = H)
+obs.H <- data.frame(year = hatch.yrs, H = hatchlings)
 
 ggplot() + geom_boxplot(data = mus2,
                         aes(x = variable, 
@@ -156,7 +188,20 @@ phi <- 0.6
 For each cohort of neophytes, they are separated into those who hatched 9, 10, 11, or 12 years ago. 
 
 ```{r}
-hatchlings <- vector(mode = "numeric", length = sim.length)
+# set up the data
+max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + min.age
+# the number of neophytes:
+neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+
+Y <- length(H)  
+hatch.yrs <- dat.0$Year[1:Y]
+
+# neophytes <- rev(dat.0$Neophytes)
+sim.length <- length(neophytes)
+hatchlings <- vector(mode = "numeric", length = length(H))
 
 # when the qs are time dependent, their indices have to match the neophytes indices. Note that in this case, qs don't add up to 1.0. 
 for (k in 4:sim.length) {
@@ -171,11 +216,11 @@ for (k in 4:sim.length) {
 # N11 <- neophytes[2:13]
 # N12 <- neophytes[1:12]
 
-Y <- sim.length - 3
-H <- hatchlings[1:Y]
-data_list = list(N = neophytes[1:sim.length],
+data_list = list(N = neophytes,
                  Y = Y, 
-                 H = H)
+                 H = hatchlings,
+                 n_ages = 4,
+                 max_age = 12)
 
 
 ```
@@ -183,12 +228,12 @@ data_list = list(N = neophytes[1:sim.length],
 ```{r}
 
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod_qt_phi <- stan("models/Model_qt_phi.stan", 
+mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
                    data=data_list, 
                    chains = 5, 
-                   warmup = 5000,
-                   iter = 10000,
-                   cores = getOption("mc.cores", 8),
+                   warmup = 10000,
+                   iter = 15000,
+                   cores = getOption("mc.cores", 5),
                    control = list(adapt_delta = 0.99))
 
 ```
@@ -237,7 +282,7 @@ mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
 hatch.yrs <- 1982:1993
-obs.H <- data.frame(year = hatch.yrs, H = H)
+obs.H <- data.frame(year = hatch.yrs, H = hatchlings)
 
 ggplot() + geom_boxplot(data = mus2,
                         aes(x = variable, 
@@ -262,7 +307,20 @@ q.10 <- 0.2
 q.11 <- 0.4
 q.12 <- 0.3
 
-hatchlings <- vector(mode = "numeric", length = sim.length)
+# set up the data
+max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + min.age
+# the number of neophytes:
+neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+
+Y <- length(H)  
+hatch.yrs <- dat.0$Year[1:Y]
+
+# neophytes <- rev(dat.0$Neophytes)
+sim.length <- length(neophytes)
+hatchlings <- vector(mode = "numeric", length = length(H))
 
 # avearge annual survival rate 
 phi <- rbeta(n = sim.length, shape1 = 3, shape2 = 3)
@@ -277,34 +335,42 @@ for (k in 4:sim.length) {
   hatchlings[k-3] <- (neophytes[k] * q.9) * (phi[k]^(-9)) + 
     (neophytes[k-1] * q.10) * (phi[k]^(-10)) + 
     (neophytes[k-2] * q.11) * (phi[k]^(-11)) + 
-    (neophytes[k-3] * q.12) * (phi[k]^(-12)) + rnorm(n = 1, mean = 0, sd = 100)
+    (neophytes[k-3] * q.12) * (phi[k]^(-12)) + rnorm(n = 1, mean = 0, sd = 50)
 }
 
-N9 <- neophytes[4:15]
-N10 <- neophytes[3:14]
-N11 <- neophytes[2:13]
-N12 <- neophytes[1:12]
 
-Y <- length(N12)
-H <- hatchlings[1:Y]
-data_list = list(N9 = N9, 
-                 N10 = N10, 
-                 N11 = N11, 
-                 N12 = N12,
+data_list = list(N = neophytes,
                  Y = Y, 
-                 H = H)
+                 H = hatchlings,
+                 n_ages = 4,
+                 max_age = 12)
+
+
+# N9 <- neophytes[4:15]
+# N10 <- neophytes[3:14]
+# N11 <- neophytes[2:13]
+# N12 <- neophytes[1:12]
+# 
+# Y <- length(N12)
+# H <- hatchlings[1:Y]
+# data_list = list(N9 = N9, 
+#                  N10 = N10, 
+#                  N11 = N11, 
+#                  N12 = N12,
+#                  Y = Y, 
+#                 H = H)
 ```
 
 
 ```{r}
 
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod_q_phit <- stan("models/Model_q_phit.stan", 
+mod_q_phit <- stan("models/Model_q_phit_1.stan", 
                    data=data_list, 
                    chains = 5, 
                    warmup = 5000,
                    iter = 10000,
-                   cores = getOption("mc.cores", 8),
+                   cores = getOption("mc.cores", 5),
                    control = list(adapt_delta = 0.99))
 
 
@@ -344,7 +410,7 @@ print(mod_q_phit)
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- extract(mod_q_phit)
+list_of_samples <- rstan::extract(mod_q_phit)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
@@ -353,7 +419,7 @@ mus2 <- reshape2::melt(mus, value.name = "log_hatchlings")
 
 # then the observed counts here:
 hatch.yrs <- 1982:1993
-obs.H <- data.frame(year = hatch.yrs, H = H)
+obs.H <- data.frame(year = hatch.yrs, H = hatchlings)
 
 ggplot() + geom_boxplot(data = mus2,
                         aes(x = variable, 
@@ -365,3 +431,5 @@ ggplot() + geom_boxplot(data = mus2,
 
 
 ```
+
+Not particularly good estimates. Including time-specific survival rates doesn't do well. 

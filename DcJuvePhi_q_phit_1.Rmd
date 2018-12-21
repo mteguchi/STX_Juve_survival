@@ -11,7 +11,7 @@ library(loo)
 library(tidyverse)
 
 save.fig <- T
-
+#set.seed(10)
 n.cores <- parallel::detectCores()
 MCMC.warmup <- 5000
 MCMC.iter <- 10000
@@ -44,10 +44,10 @@ neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
 
 Y <- length(H)  
 hatch.yrs <- dat.0$Year[1:Y]
- 
+
 ```
 
-Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(x)) are assumed equal.  Annual average survival rates are also assumed equal. 
+Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(xs), where x = 9, 10, 11, or 12) are assumed equal.  Annual average survival rates are also assumed equal. 
 
 ```{r}
 data_list = list(N = neophytes,
@@ -56,8 +56,7 @@ data_list = list(N = neophytes,
                  n_ages = n.ages,
                  max_age = max.age)
 
-#n.cores <- options(mc.cores = parallel::detectCores())
-mod_q_phi <- stan("models/Model_q_phi_1.stan", 
+mod_q_phit <- stan("models/Model_q_phit_1.stan", 
                  data=data_list, 
                  chains = MCMC.chains, 
                  warmup = MCMC.warmup,
@@ -69,44 +68,43 @@ mod_q_phi <- stan("models/Model_q_phi_1.stan",
 
 Extract the log-likelihood and run the loo.
 ```{r}
-log_lik_q_phi <- extract_log_lik(mod_q_phi, merge_chains = FALSE)
-rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
-loo(log_lik_q_phi, r_eff = rel_n_eff_q_phi, cores = 4)
+log_lik_q_phit <- extract_log_lik(mod_q_phit, merge_chains = FALSE)
+rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
+loo(log_lik_q_phit, r_eff = rel_n_eff_q_phit, cores = 4)
 
 ```
 
 To see trace plots, use taceplot.
 
 ```{r}
+traceplot(mod_q_phit, pars = c("q"))
 
-traceplot(mod_q_phi, pars = "q")
 ```
 
 ```{r}
-traceplot(mod_q_phi, pars = c("phi"))
+traceplot(mod_q_phit, pars = c("phi"))
 
 ```
 
 To see a summary of estimated paramters use print.
 ```{r}
 # to see Rhat and other stats, use print
-print(mod_q_phi)
+print(mod_q_phit)
 
 ```
 
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- rstan::extract(mod_q_phi)
+list_of_samples <- rstan::extract(mod_q_phit)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- rev(hatch.yrs)
-
+colnames(mus) <- 1993:1982
 mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
   transmute(year = variable, log_hatchlings = log_hatchlings)
 
-mus2$year <- factor(mus2$year, c(hatch.yrs))
+mus2$year <- factor(mus2$year, c(1982:1993))
 
 # mus <- as.data.frame(list_of_samples$mu)
 # colnames(mus) <- 1982:1993
@@ -115,24 +113,23 @@ mus2$year <- factor(mus2$year, c(hatch.yrs))
 # then the observed counts here:
 obs.H <- data.frame(year = hatch.yrs, H = H)
 
-p.q.phi <- ggplot() + geom_boxplot(data = mus2,
-                        aes(x = year, 
-                            y = log_hatchlings)) + 
+p.q.phit <- ggplot() + geom_boxplot(data = mus2,
+                                    aes(x = year, 
+                                        y = log_hatchlings)) + 
   geom_point(data = obs.H,
              aes(x = as.factor(year), 
                  y = log(H)),
              color = "red", size = 3)+ 
   labs(x = "", y = "ln(hatchlings)")
 
-print(p.q.phi)
-
+print(p.q.phit)
 if (save.fig)
-  ggsave(filename = paste0("figures/logHatch_q_phi_maxAge_", 
+  ggsave(filename = paste0("figures/logHatch_q_phit_maxAge_", 
                            max.age, "_nAges_", n.ages, ".png"),
          device = "png", dpi = 600,
-         plot = p.q.phi)
+         plot = p.q.phit)
 
 ```
 
 
-The plot indicates that the estimates from the model are not great fit with the data. 
+The plot suggests not very precise estimates... phi(t) is not very useful. 

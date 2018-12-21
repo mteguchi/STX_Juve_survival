@@ -30,58 +30,81 @@ p.12 <- 0.2
 # avearge annual survival rate 
 phi <- 0.6
 
+# maximum age of first reproduction
+max.age <- 12
+# the number of age classes for the first reproduction 
+n.ages <- 4   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
 
+min.age <- max.age - n.ages + 1
 ```
 
 Using four cohorts at a time, they mature into one neophyte group. This simulation assumes that the proporiton that mature at certain age does not change over time. For example, p.9, which is the proportion of hatchlings in a cohort that mature after 9 years is the same for all cohorts. 
 
 ```{r}
-hatchlings <- na.omit(dat.0$Hatchlings)
-sim.length <- length(hatchlings)
-neophytes <- vector(mode = "numeric", length = sim.length-3)
+set.seed(10)
+# set up the data
+# To create T years of neophytes data, we need to have T+n.ages-1 years of hatchling data
+# This is the opposite of simulation_test2.Rmd, in which hatchling data were
+# simulated from the neophytes. 
 
-for (k in 4:sim.length) {
-  neophytes[k-3] <- (hatchlings[k] * p.9) * (phi^9) + 
-    (hatchlings[k-1] * p.10) * (phi^10) + 
-    (hatchlings[k-2] * p.11) * (phi^11) + 
-    (hatchlings[k-3] * p.12) * (phi^12) + rnorm(n=1, mean = 0, sd = 10)
+# because we are making all neophytes numbers, we can use all hatchlings data:
+hatchlings <- na.omit(dat.0$Hatchlings)
+sim.length <- length(hatchlings) - n.ages + 1
+neophytes <- vector(mode = "numeric", length = sim.length)
+
+for (k in 1:sim.length) {
+  neophytes[k] <- (hatchlings[k] * p.12) * (phi^12) + 
+    (hatchlings[k+1] * p.10) * (phi^11) + 
+    (hatchlings[k+2] * p.11) * (phi^10) + 
+    (hatchlings[k+3] * p.12) * (phi^9) + rnorm(n=1, mean = 0, sd = 10)
 }
 
-# the total number of neophytes is the sum of all these.
+# the model uses neophytes to estimate hatchlings, going backwards in time. So,
+# we need to extract hatchlings that match with the neophytes. Also, neophytes 
+# vector needs to be reversed in time. The way this was simulated, we have the 
+# same length for neophytes and hatchlings but in reality, this can't work because
+# we can't use predicted numbers as data. 
 
-neophytes <- rev(neophytes)
+Y <- 12
+H <- hatchlings[1:Y]
+N <- rev(neophytes[1:(Y+n.ages-1)])
 ```
 
 
 Once the data are created, fit the model to the data to see if we can get the "right" answer back.
 
 ```{r}
-N9 <- neophytes[4:(sim.length-3)]
-N10 <- neophytes[3:(sim.length-4)]
-N11 <- neophytes[2:(sim.length-5)]
-N12 <- neophytes[1:(sim.length-6)]
+# N9 <- neophytes[4:(sim.length-3)]
+# N10 <- neophytes[3:(sim.length-4)]
+# N11 <- neophytes[2:(sim.length-5)]
+# N12 <- neophytes[1:(sim.length-6)]
+# 
+# Y <- length(N12)
+# # hatchling vector needs to be reversed because the simulation goes forward, but the model requires the backward data. 
+# H <- rev(hatchlings[1:Y])
+# data_list = list(N9 = N9, 
+#                  N10 = N10, 
+#                  N11 = N11, 
+#                  N12 = N12,
+#                  Y = Y, H = H)
 
-Y <- length(N12)
-# hatchling vector needs to be reversed because the simulation goes forward, but the model requires the backward data. 
-H <- rev(hatchlings[1:Y])
-data_list = list(N9 = N9, 
-                 N10 = N10, 
-                 N11 = N11, 
-                 N12 = N12,
-                 Y = Y, H = H)
-
+data_list = list(N = N,
+                 Y = Y, 
+                 H = H,
+                 n_ages = 4,
+                 max_age = 12)
 ```
 
 In the model, q is the proportion of neophytes in year y that hatched x years ago, where x is 9, 10, 11, or 12. These proportions add up to 1.0 when they are constant over time.   
 
 Then run the stan models.  First is the simplest: q-dot, phi-dot.
 ```{r}
-mod_q_phi <- stan("models/Model_q_phi.stan", 
+mod_q_phi <- stan("models/Model_q_phi_1.stan", 
                   data=data_list, 
                   chains = 5, 
                   warmup = 5000,
                   iter = 10000,
-                  cores = getOption("mc.cores", 8),
+                  cores = getOption("mc.cores", 5),
                   control = list(adapt_delta = 0.99))
 
 ```
@@ -128,16 +151,16 @@ list_of_samples <- rstan::extract(mod_q_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1995:1982
+colnames(mus) <- 1993:1982
 mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
   transmute(year = variable, log_hatchlings = log_hatchlings)
 
-mus2$year <- factor(mus2$year, c(1982:1995))
+mus2$year <- factor(mus2$year, c(1982:1993))
   #arrange(desc(year))
 
 # then the observed counts here:
-hatch.yrs <- 1982:1995
-obs.H <- data.frame(year = hatch.yrs, H = rev(H))
+hatch.yrs <- 1982:1993
+obs.H <- data.frame(year = hatch.yrs, H = H)
 
 ggplot() + geom_boxplot(data = mus2,
                         aes(x = year, 
@@ -155,13 +178,13 @@ Looks a bit better now. It'd be good to have tighter estimates but when data are
 Next model has time-specific q but constant phi. For this model, one N vector needs to be constructed. 
 
 ```{r}
-N <- neophytes[1:(sim.length-3)]
-Y <- length(N) - 3
-data_list = list(N = N, 
-                 Y = Y, H = H)
+# N <- neophytes[1:(sim.length-3)]
+# Y <- length(N) - 3
+# data_list = list(N = N, 
+#                  Y = Y, H = H)
 
 #n.cores <- options(mc.cores = parallel::detectCores())
-mod_qt_phi <- stan("models/Model_qt_phi.stan", 
+mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
                    data=data_list, 
                    chains = 5, 
                    warmup = 5000,
@@ -210,15 +233,15 @@ list_of_samples <- rstan::extract(mod_qt_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1995:1982
+colnames(mus) <- 1993:1982
 mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
   transmute(year = variable, log_hatchlings = log_hatchlings)
 
-mus2$year <- factor(mus2$year, c(1982:1995))
+mus2$year <- factor(mus2$year, c(1982:1993))
  
 # then the observed counts here:
 hatch.yrs <- 1982:1993
-obs.H <- data.frame(year = hatch.yrs, H = rev(H))
+obs.H <- data.frame(year = hatch.yrs, H = H)
 
 ggplot() + geom_boxplot(data = mus2,
                         aes(x = year, 
