@@ -11,11 +11,12 @@ library(loo)
 library(tidyverse)
 
 save.fig <- T
+save.results <- T
 #set.seed(10)
 n.cores <- parallel::detectCores()
-MCMC.warmup <- 5000
-MCMC.iter <- 10000
-MCMC.chains <- ifelse(n.cores < 5, n.cores, 5)
+MCMC.setup <- list(warmup = 5000,
+                   iter = 10000,
+                   chains = ifelse(n.cores < 5, n.cores, 5))
 ```
 
 Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
@@ -30,7 +31,7 @@ dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 # maximum age of first reproduction
 max.age <- 12
 # the number of age classes for the first reproduction 
-n.ages <- 6   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
+n.ages <- 3   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
 
 min.age <- max.age - n.ages + 1
 
@@ -52,23 +53,24 @@ Set up the stan input. First model is q-dot and phi-dot, where the proportion of
 ```{r}
 data_list = list(N = neophytes,
                  Y = Y, 
-                 H = H,
+                 H = rev(H),
                  n_ages = n.ages,
                  max_age = max.age)
 
 mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
                  data=data_list, 
-                 chains = MCMC.chains, 
-                 warmup = MCMC.warmup,
-                 iter = MCMC.iter,
-                 cores = getOption("mc.cores", MCMC.chains),
+                 chains = MCMC.setup$chains, 
+                 warmup = MCMC.setup$warmup,
+                 iter = MCMC.setup$iter,
+                 cores = getOption("mc.cores", MCMC.setup$chains),
                  control = list(adapt_delta = 0.99))
 
 ```
 
 Extract the log-likelihood and run the loo.
 ```{r}
-log_lik_qt_phi <- extract_log_lik(mod_qt_phi, merge_chains = FALSE)
+log_lik_qt_phi <- extract_log_lik(mod_qt_phi, 
+                                  merge_chains = FALSE)
 rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
 loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 4)
 
@@ -77,7 +79,7 @@ loo(log_lik_qt_phi, r_eff = rel_n_eff_qt_phi, cores = 4)
 To see trace plots, use taceplot.
 
 ```{r}
-traceplot(mod_qt_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]", "q[1,4]"))
+traceplot(mod_qt_phi, pars = c("q[1,1]", "q[1,2]", "q[1,3]")) #, "q[1,4]"))
 
 ```
 
@@ -100,11 +102,11 @@ list_of_samples <- rstan::extract(mod_qt_phi)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1993:1982
+colnames(mus) <- rev(hatch.yrs) # 1993:1982
 mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
   transmute(year = variable, log_hatchlings = log_hatchlings)
 
-mus2$year <- factor(mus2$year, c(1982:1993))
+mus2$year <- factor(mus2$year, hatch.yrs)
 
 # mus <- as.data.frame(list_of_samples$mu)
 # colnames(mus) <- 1982:1993
@@ -129,7 +131,16 @@ if (save.fig)
          device = "png", dpi = 600,
          plot = p.qt.phi)
 
+out.list <- list(output = mod_qt_phi,
+                 MCMC.setup = MCMC.setup,
+                 data = data_list,
+                 plot = p.qt.phi)
+
+if (save.results)
+  write_rds(out.list, path = "RData/DcJuvePhi_qt_phi_1.rds")
+
+
 ```
 
 
-The plot suggests something is not quite right... to be continued. 2018-12-20
+The plot suggests it's working but the loo results are not very satisfying... 

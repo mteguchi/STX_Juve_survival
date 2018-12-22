@@ -1,5 +1,5 @@
 ---
-title: "Expanding the range of age at first reproduction in the q-phi model"
+title: "Expanding the range of age at first reproduction in the q(t)-phi(t) model"
 output: html_notebook
 ---
 
@@ -57,55 +57,56 @@ data_list = list(N = neophytes,
                  n_ages = n.ages,
                  max_age = max.age)
 
-mod_q_phit <- stan("models/Model_q_phit_1.stan", 
-                 data=data_list, 
-                 chains = MCMC.setup$chains, 
-                 warmup = MCMC.setup$warmup,
-                 iter = MCMC.setup$iter,
-                 cores = getOption("mc.cores", MCMC.setup$chains),
-                 control = list(adapt_delta = 0.99))
+mod <- stan("models/Model_qt_phit_1.stan", 
+            data=data_list, 
+            chains = MCMC.setup$chains, 
+            warmup = MCMC.setup$warmup,
+            iter = MCMC.setup$iter,
+            cores = getOption("mc.cores", MCMC.setup$chains),
+            control = list(adapt_delta = 0.99))
 
 ```
 
 Extract the log-likelihood and run the loo.
 ```{r}
-log_lik_q_phit <- extract_log_lik(mod_q_phit, merge_chains = FALSE)
-rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
-loo(log_lik_q_phit, r_eff = rel_n_eff_q_phit, cores = 4)
+log_lik <- extract_log_lik(mod, 
+                           merge_chains = FALSE)
+rel_n_eff <- relative_eff(exp(log_lik))
+loo(log_lik, r_eff = rel_n_eff, cores = 4)
 
 ```
 
 To see trace plots, use taceplot.
 
 ```{r}
-traceplot(mod_q_phit, pars = c("q"))
+traceplot(mod, pars = c("q[1,1]", "q[1,2]", "q[1,3]")) #, "q[1,4]"))
 
 ```
 
 ```{r}
-traceplot(mod_q_phit, pars = c("phi"))
+traceplot(mod, pars = c("phi"))
 
 ```
 
 To see a summary of estimated paramters use print.
 ```{r}
 # to see Rhat and other stats, use print
-print(mod_q_phit)
+print(mod)
 
 ```
 
 Plot the data and predicted to see how they compare.
 
 ```{r}
-list_of_samples <- rstan::extract(mod_q_phit)
+list_of_samples <- rstan::extract(mod)
 names(list_of_samples)
 
 mus <- as.data.frame(list_of_samples$mu)
-colnames(mus) <- 1993:1982
+colnames(mus) <- rev(hatch.yrs) # 1993:1982
 mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
   transmute(year = variable, log_hatchlings = log_hatchlings)
 
-mus2$year <- factor(mus2$year, c(1982:1993))
+mus2$year <- factor(mus2$year, hatch.yrs)
 
 # mus <- as.data.frame(list_of_samples$mu)
 # colnames(mus) <- 1982:1993
@@ -114,7 +115,7 @@ mus2$year <- factor(mus2$year, c(1982:1993))
 # then the observed counts here:
 obs.H <- data.frame(year = hatch.yrs, H = H)
 
-p.q.phit <- ggplot() + geom_boxplot(data = mus2,
+p.qt.phit <- ggplot() + geom_boxplot(data = mus2,
                                     aes(x = year, 
                                         y = log_hatchlings)) + 
   geom_point(data = obs.H,
@@ -123,21 +124,23 @@ p.q.phit <- ggplot() + geom_boxplot(data = mus2,
              color = "red", size = 3)+ 
   labs(x = "", y = "ln(hatchlings)")
 
-print(p.q.phit)
+print(p.qt.phit)
 if (save.fig)
-  ggsave(filename = paste0("figures/logHatch_q_phit_maxAge_", 
+  ggsave(filename = paste0("figures/logHatch_qt_phit_maxAge_", 
                            max.age, "_nAges_", n.ages, ".png"),
          device = "png", dpi = 600,
-         plot = p.q.phit)
+         plot = p.qt.phit)
 
-out.list <- list(output = mod_q_phit,
+out.list <- list(output = mod,
                  MCMC.setup = MCMC.setup,
                  data = data_list,
-                 plot = p.q.phit)
+                 plot = p.qt.phit)
 
 if (save.results)
-  write_rds(out.list, path = "RData/DcJuvePhi_q_phit_1.rds")
+  write_rds(out.list, path = "RData/DcJuvePhi_qt_phit_1.rds")
+
+
 ```
 
 
-The plot suggests not very precise estimates... phi(t) is not very useful. 
+The plot suggests it's working but the uncertainty seems a bit too big... 

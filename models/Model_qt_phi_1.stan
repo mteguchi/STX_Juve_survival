@@ -4,6 +4,9 @@
 // are considered for ages at first reproduction (n_ages). The maximum age can be set 
 // through max_age variable.  
 
+// Neophytes vector is in reverse chronological order to accomodate the model. So...
+// Estimated hatchlings (mu) are also in the reverse order. 
+
 data {
 	int<lower=1> Y;            // The total number of years in the time series that can be used 
 	int<lower = 1> n_ages;             // the number of age groups in AFR
@@ -15,7 +18,7 @@ data {
 parameters {
 	real<lower=0, upper = 10> sigma;       // standard deviation of log-normal hatchling counts
 	real<lower=0, upper = 1.0> phi;        // annual average survival rates for juveniles	
-	//real<lower=0, upper=1.0> p[Y, 4];
+	
 	simplex[n_ages] q[Y+n_ages-1];
 }
 
@@ -28,7 +31,7 @@ transformed parameters {
 		tmp = 0.0;
 
 		for (j in 1:n_ages){
-			tmp += q[i, j] * N[i + j -1] * pow(phi, -(max_age - j + 1));		
+			tmp += q[i + j -1, j] * N[i + j -1] * pow(phi, -(max_age - j + 1));		
 		}
 		mu[i] = log(tmp);
 		/* mu[i] = log(q[i, 1] * N[i] * pow(phi,-12) +
@@ -47,7 +50,7 @@ model
 {
 	// Priors     	
 	sigma ~ uniform(0 , 10);
-	phi ~ beta(1,1);
+	phi ~ beta(3,3);
 
 	for (i in 1:Y){
 		//phi[i] ~ beta(1,1);

@@ -4,6 +4,9 @@
 // are considered for ages at first reproduction (n_ages). The maximum age can be set 
 // through max_age variable. 
 
+// Neophytes vector is in reverse chronological order to accomodate the model. So...
+// Estimated hatchlings (mu) are also in the reverse order. 
+
 
 data {
 	int<lower=1> Y;                 // The total number of years in the time series that can be used 

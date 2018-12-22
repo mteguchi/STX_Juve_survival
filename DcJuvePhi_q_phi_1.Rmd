@@ -11,11 +11,12 @@ library(loo)
 library(tidyverse)
 
 save.fig <- T
+save.results <- T
 
 n.cores <- parallel::detectCores()
-MCMC.warmup <- 5000
-MCMC.iter <- 10000
-MCMC.chains <- ifelse(n.cores < 5, n.cores, 5)
+MCMC.setup <- list(warmup = 5000,
+                   iter = 10000,
+                   chains = ifelse(n.cores < 5, n.cores, 5))
 ```
 
 Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
@@ -30,7 +31,7 @@ dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 # maximum age of first reproduction
 max.age <- 12
 # the number of age classes for the first reproduction 
-n.ages <- 6   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
+n.ages <- 3   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
 
 min.age <- max.age - n.ages + 1
 
@@ -52,17 +53,17 @@ Set up the stan input. First model is q-dot and phi-dot, where the proportion of
 ```{r}
 data_list = list(N = neophytes,
                  Y = Y, 
-                 H = H,
+                 H = rev(H),
                  n_ages = n.ages,
                  max_age = max.age)
 
 #n.cores <- options(mc.cores = parallel::detectCores())
 mod_q_phi <- stan("models/Model_q_phi_1.stan", 
                  data=data_list, 
-                 chains = MCMC.chains, 
-                 warmup = MCMC.warmup,
-                 iter = MCMC.iter,
-                 cores = getOption("mc.cores", MCMC.chains),
+                 chains = MCMC.setup$chains, 
+                 warmup = MCMC.setup$warmup,
+                 iter = MCMC.setup$iter,
+                 cores = getOption("mc.cores", MCMC.setup$chains),
                  control = list(adapt_delta = 0.99))
 
 ```
@@ -131,6 +132,14 @@ if (save.fig)
                            max.age, "_nAges_", n.ages, ".png"),
          device = "png", dpi = 600,
          plot = p.q.phi)
+
+out.list <- list(output = mod_q_phi,
+                 MCMC.setup = MCMC.setup,
+                 data = data_list,
+                 plot = p.q.phi)
+
+if (save.results)
+  write_rds(out.list, path = "RData/DcJuvePhi_q_phi_1.rds")
 
 ```
 
