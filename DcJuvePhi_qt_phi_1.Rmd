@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 
-```{r}
+```{r message=FALSE, echo=FALSE}
 rm(list=ls())
 library(rstan)
 library(loo)
@@ -21,7 +21,7 @@ MCMC.setup <- list(warmup = 5000,
 
 Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
 
-In the previous analysis, four groups were used as possible age at first reproduction:  9, 10, 11, and 12 years. This analysis extends it to younger ages so that the average AFR may be estimated. 
+In the previous analysis, four groups were used as possible age at first reproduction:  9, 10, 11, and 12 years. The next chunk can adjust the age ranges. 
 
 Set up the dataset first.
 ```{r}
@@ -29,9 +29,9 @@ Set up the dataset first.
 dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # maximum age of first reproduction
-max.age <- 12
+max.age <- 13  #12
 # the number of age classes for the first reproduction 
-n.ages <- 3   # 4 means 9, 10, 11, and 12 years old are possible AFR ages.
+n.ages <- 5   # the number of age groups, given the max above. 
 
 min.age <- max.age - n.ages + 1
 
@@ -48,9 +48,9 @@ hatch.yrs <- dat.0$Year[1:Y]
 
 ```
 
-Set up the stan input. First model is q-dot and phi-dot, where the proportion of neophytes that mature at age x (q(xs), where x = 9, 10, 11, or 12) are assumed equal.  Annual average survival rates are also assumed equal. 
+Set up the stan input. The proportion of neophytes that mature at age x (q(xs), where x = min.age, ..., max.age) are assumed time-dependent.  Annual average survival rates are assumed time-independent (phi(.)). 
 
-```{r}
+```{r message=FALSE, echo=FALSE}
 data_list = list(N = neophytes,
                  Y = Y, 
                  H = rev(H),
@@ -58,12 +58,12 @@ data_list = list(N = neophytes,
                  max_age = max.age)
 
 mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
-                 data=data_list, 
-                 chains = MCMC.setup$chains, 
-                 warmup = MCMC.setup$warmup,
-                 iter = MCMC.setup$iter,
-                 cores = getOption("mc.cores", MCMC.setup$chains),
-                 control = list(adapt_delta = 0.99))
+                   data=data_list, 
+                   chains = MCMC.setup$chains, 
+                   warmup = MCMC.setup$warmup,
+                   iter = MCMC.setup$iter,
+                   cores = getOption("mc.cores", MCMC.setup$chains),
+                   control = list(adapt_delta = 0.99))
 
 ```
 
@@ -137,7 +137,8 @@ out.list <- list(output = mod_qt_phi,
                  plot = p.qt.phi)
 
 if (save.results)
-  write_rds(out.list, path = "RData/DcJuvePhi_qt_phi_1.rds")
+  write_rds(out.list, path = paste0("RData/DcJuvePhi_qt_phi_maxAge_", 
+                                    max.age, "_nAges_", n.ages, ".rds"))
 
 
 ```
