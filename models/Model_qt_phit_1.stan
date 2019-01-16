@@ -51,7 +51,7 @@ model
 	//phi ~ beta(1,1);
 
 	for (i in 1:Y){
-		phi[i] ~ beta(1,1);
+		phi[i] ~ beta(3,3);
 		H[i] ~ lognormal(mu[i], sigma);
 		q[i] ~ dirichlet(rep_vector(alpha, n_ages));
 		

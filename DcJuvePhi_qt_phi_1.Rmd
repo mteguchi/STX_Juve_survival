@@ -21,7 +21,7 @@ MCMC.setup <- list(warmup = 5000,
 
 Estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed.
 
-In the previous analysis, four groups were used as possible age at first reproduction:  9, 10, 11, and 12 years. The next chunk can adjust the age ranges. 
+In the previous analysis, four groups were used as possible age at first reproduction:  9, 10, 11, and 12 years. The next chunk can adjust the age ranges. The size of dataset becomes smaller with increarsing max.age and n.ages because there are only limited number of years in the data. 
 
 Set up the dataset first.
 ```{r}

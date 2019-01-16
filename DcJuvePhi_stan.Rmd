@@ -1,0 +1,294 @@
+---
+title: "Expanding the range of age at first reproduction in the q-phi model"
+output: html_notebook
+---
+
+```{r message=FALSE, echo=FALSE}
+rm(list=ls())
+library(rstan)
+library(loo)
+library(tidyverse)
+library(bayesplot)
+library(ggplot2)
+#library(rstanarm)
+
+save.fig <- T
+save.results <- T
+#set.seed(10)
+n.cores <- parallel::detectCores()
+MCMC.setup <- list(warmup = 5000,
+                   iter = 10000,
+                   chains = ifelse(n.cores < 5, n.cores, 5))
+```
+
+This script describes the method of estimating average juvenile survival rates of leatherbacks from the numbers of neophytes and hatchlings. Because hatchlings are counted with errors but not neophytes, the time is reversed, where the number of hatchlings y years ago (H_(t-x)) is modeled as a function of the number of neophytes this year N_t and survival rate (phi): H_(t-x) = (phi^(-x)) * N_t.  The value x is equivalent of the age at first reproduction.  The age at first reproduction is treated as an unknown quantity with reasonable bounds (x_min and x_max), where the proportions that mature at age x are also unknown parameter (q_x, where x = x_min, x_min+1, ..., x_max, sum(q_x) = 1.0).  The vector of proportions (q) may be modeled as cohort-specific (q(t)) or constant over time (q(.)). The survival rate (phi) also can be time specific (phi(t)) or constant (phi(.)). 
+
+For the time-specific survival rates, it may be possible to find covariates that can explain the changes in survival rates and model them through the logit function. 
+
+In this script, all models are run sequentially. Old scripts (DcJuvePhi_*_1.Rmd) were combined. In all models, the priors for the survival rates are beta(3,3). 
+
+Set up the dataset first.
+```{r}
+dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
+
+# maximum age of first reproduction
+max.age <- 12  #12
+# the number of age classes for the first reproduction 
+n.ages <- 3   # the number of age groups, given the max above. 
+
+min.age <- max.age - n.ages + 1
+
+
+out.filename <- paste0("RData/DcJuvePhi_maxAge_", 
+                       max.age, "_nAges_", n.ages, ".rds")
+
+if (file.exists(out.filename)){
+  save.fig <- F
+  save.results <- F
+}
+
+# set up the data
+max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
+
+min.yr <- dat.0$Year[1] + min.age
+# the number of neophytes:
+neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+
+Y <- length(H)  
+hatch.yrs <- dat.0$Year[1:Y]
+
+data_list = list(N = neophytes,
+                 Y = Y, 
+                 H = rev(H),
+                 n_ages = n.ages,
+                 max_age = max.age)
+
+```
+
+The first is the simplest (q(.) phi(.)), where the proportions that mature at ages min_x <= x <= max_x (q) are treated as a constant over time. The survival rate also is assumed constant over time. 
+```{r message=FALSE, echo=TRUE}
+if (!file.exists(out.filename)){
+  mod_q_phi <- stan("models/Model_q_phi_1.stan", 
+                    data=data_list, 
+                    chains = MCMC.setup$chains, 
+                    warmup = MCMC.setup$warmup,
+                    iter = MCMC.setup$iter,
+                    cores = getOption("mc.cores", 
+                                      MCMC.setup$chains),
+                    control = list(adapt_delta = 0.99))
+  
+  log_lik_q_phi <- extract_log_lik(mod_q_phi, 
+                                   merge_chains = FALSE)
+  rel_n_eff_q_phi <- relative_eff(exp(log_lik_q_phi))
+  loo_q_phi <- loo(log_lik_q_phi, 
+                   r_eff = rel_n_eff_q_phi, 
+                   cores = n.cores)
+  
+}
+
+```
+
+The second model treats the proportions that mature at ages min_x <= x <= max_x are cohort-specific (q(t)), whereas the survival rate is considered constant phi(.).
+```{r message=FALSE, echo=FALSE}
+if (!file.exists(out.filename)){
+  mod_qt_phi <- stan("models/Model_qt_phi_1.stan", 
+                     data=data_list, 
+                     chains = MCMC.setup$chains, 
+                     warmup = MCMC.setup$warmup,
+                     iter = MCMC.setup$iter,
+                     cores = getOption("mc.cores", 
+                                       MCMC.setup$chains),
+                     control = list(adapt_delta = 0.99))
+  
+  # Extract the log-likelihood and run the loo.
+  log_lik_qt_phi <- extract_log_lik(mod_qt_phi, 
+                                    merge_chains = FALSE)
+  rel_n_eff_qt_phi <- relative_eff(exp(log_lik_qt_phi))
+  loo_qt_phi <- loo(log_lik_qt_phi, 
+                    r_eff = rel_n_eff_qt_phi, 
+                    cores = n.cores)
+}
+```
+
+The third model treats the proportions that mature at ages min_x <= x <= max_x are constant over time (q(.)), whereas the survival rate is time specific (phi(t)). 
+```{r message=FALSE, echo=FALSE}
+if (!file.exists(out.filename)){
+  mod_q_phit <- stan("models/Model_q_phit_1.stan", 
+                     data=data_list, 
+                     chains = MCMC.setup$chains, 
+                     warmup = MCMC.setup$warmup,
+                     iter = MCMC.setup$iter,
+                     cores = getOption("mc.cores", 
+                                       MCMC.setup$chains),
+                     control = list(adapt_delta = 0.99))
+  
+  log_lik_q_phit <- extract_log_lik(mod_q_phit, merge_chains = FALSE)
+  rel_n_eff_q_phit <- relative_eff(exp(log_lik_q_phit))
+  loo_q_phit <- loo(log_lik_q_phit, 
+                    r_eff = rel_n_eff_q_phit, 
+                    cores = n.cores)
+}  
+```
+
+
+The fourth model treats the both parameters to be time-specific (q(t) phi(t)). 
+```{r}
+if (!file.exists(out.filename)){
+  mod_qt_phit <- stan("models/Model_qt_phit_1.stan", 
+                      data=data_list, 
+                      chains = MCMC.setup$chains, 
+                      warmup = MCMC.setup$warmup,
+                      iter = MCMC.setup$iter,
+                      cores = getOption("mc.cores", 
+                                        MCMC.setup$chains),
+                      control = list(adapt_delta = 0.99))
+  
+  log_lik_qt_phit <- extract_log_lik(mod_qt_phit, 
+                                     merge_chains = FALSE)
+  rel_n_eff_qt_phit <- relative_eff(exp(log_lik_qt_phit))
+  loo_qt_phit <- loo(log_lik_qt_phit, 
+                     r_eff = rel_n_eff_qt_phit, 
+                     cores = n.cores)
+}
+```
+
+After running all the four models, we can compare LOOIC values. 
+```{r}
+# model names - make sure these match with the order of looic below
+if (!file.exists(out.filename)){
+  model.names <- c("q_phi", "q_phit", "qt_phi", "qt_phit")
+  looic <- c(loo_q_phi$estimates["looic", "Estimate"],
+             loo_q_phit$estimates["looic", "Estimate"],
+             loo_qt_phi$estimates["looic", "Estimate"],
+             loo_qt_phit$estimates["looic", "Estimate"])
+  
+  best.model.name <- model.names[looic == min(looic)]
+  best.model.name
+  
+  models <- list(mod_q_phi, mod_q_phit, mod_qt_phi, mod_qt_phit)
+  loos <- list(loo_q_phi, loo_q_phit, loo_qt_phi, loo_qt_phit)
+}
+```
+
+When the analysis has been done for the specified maximum age and the number of age groups, load the results.
+```{r}
+if (file.exists(out.filename)){
+  run.results <- readRDS(file = paste0("RData/DcJuvePhi_maxAge_", 
+                                       max.age, "_nAges_", n.ages, ".rds"))
+  loos <- run.results$loo
+  looic <- c(loos$q_phi$estimates["looic", "Estimate"],
+             loos$q_phit$estimates["looic", "Estimate"],
+             loos$qt_phi$estimates["looic", "Estimate"],
+             loos$qt_phit$estimates["looic", "Estimate"])
+  models <- run.results$mods
+
+}
+```
+
+According to the looic values, the best model is qt_phi. Look at how Pareto-k statitsics look for this model. This result shows the posterior predictive accuracy of the model.  
+
+```{r}
+loos[looic == min(looic)]
+
+```
+
+All k values are unacceptably high, indicating incorrect model specification or outliers.  Not very encouraging... maybe a longer dataset may alleviate this problem. We can look at which data points are problematic by plotting the loo results.
+
+```{r}
+plot(loos$q_phit)
+```
+
+For now, I'll just go ahead and use this. 
+
+Even though the model may not be appropriate for the data, convergence of chains can be seen from trace plots. For example...
+```{r}
+model.best <- models[looic == min(looic)][[1]]
+traceplot(model.best, 
+          pars = c("q[1]", "q[2]", "q[3]")) #, "q[1,4]"))
+
+```
+
+The q parameter are all over the place from 0 to 1... maybe not very useful. 
+
+And for the annual survival rate (time-independent):
+```{r}
+traceplot(model.best, 
+          pars = c("phi"))
+
+```
+
+Here are the estimated parameters for the best model. 
+```{r}
+print(model.best)
+```
+
+To see just relevant parameters in the model, we can extract them.
+```{r}
+q_phi_summary <- summary(model.best, 
+                         pars = c("phi", "q"),
+                         probs = c(0.025, 0.5, 0.975))$summary
+
+print(q_phi_summary)
+```
+
+I want to see the posterior on phi. So, first extract the draws into a dataframe.
+
+```{r}
+draws.df <- as.data.frame(model.best)
+```
+
+In this section, I compare the estimated parameters from the model and the observed data.  
+
+```{r}
+list_of_samples <- rstan::extract(model.best)
+names(list_of_samples)
+
+mus <- as.data.frame(list_of_samples$mu)
+colnames(mus) <- rev(hatch.yrs) # 1993:1982
+mus2 <- reshape2::melt(mus, value.name = "log_hatchlings") %>%
+  transmute(year = variable, log_hatchlings = log_hatchlings)
+
+mus2$year <- factor(mus2$year, hatch.yrs)
+
+# then the observed counts here:
+obs.H <- data.frame(year = hatch.yrs, H = H)
+
+p.qt.phi <- ggplot() + 
+  geom_boxplot(data = mus2,
+               aes(x = year, 
+                   y = log_hatchlings)) + 
+  geom_point(data = obs.H,
+             aes(x = as.factor(year), 
+                 y = log(H)),
+             color = "red", size = 3)+ 
+  labs(x = "", y = "ln(hatchlings)")
+
+print(p.qt.phi)
+if (save.fig)
+  ggsave(filename = paste0("figures/logHatch_qt_phi_maxAge_", 
+                           max.age, "_nAges_", n.ages, ".png"),
+         device = "png", dpi = 600,
+         plot = p.qt.phi)
+
+if (save.results){
+  out.list <- list(mods = list(q_phi = mod_q_phi,
+                             q_phit = mod_q_phit,
+                             qt_phi = mod_qt_phi,
+                             qt_phit = mod_qt_phit),
+                 loo = list(q_phi = loo_q_phi,
+                            q_phit = loo_q_phit,
+                            qt_phi = loo_qt_phi,
+                            qt_phit = loo_qt_phit),
+                 MCMC.setup = MCMC.setup,
+                 data = data_list,
+                 plot = p.qt.phi)
+  write_rds(out.list, path = paste0("RData/DcJuvePhi_maxAge_", 
+                                    max.age, "_nAges_", n.ages, ".rds"))
+
+}
+
+
+```
+
+The plot suggests it's working but the loo results are not very satisfying... 

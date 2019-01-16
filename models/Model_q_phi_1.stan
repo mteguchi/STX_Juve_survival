@@ -52,7 +52,7 @@ model
 {
 	// Priors     	
 	sigma ~ uniform(0 , 10);
-	phi ~ beta(1,1);
+	phi ~ beta(3,3);
 	q ~ dirichlet(rep_vector(alpha, n_ages));
 
 	for (i in 1:Y){
