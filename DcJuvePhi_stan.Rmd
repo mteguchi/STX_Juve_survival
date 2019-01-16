@@ -32,9 +32,9 @@ Set up the dataset first.
 dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # maximum age of first reproduction
-max.age <- 12  #12
+max.age <- 10  #12
 # the number of age classes for the first reproduction 
-n.ages <- 3   # the number of age groups, given the max above. 
+n.ages <- 5   # the number of age groups, given the max above. 
 
 min.age <- max.age - n.ages + 1
 
@@ -153,11 +153,12 @@ if (!file.exists(out.filename)){
 }
 ```
 
-After running all the four models, we can compare LOOIC values. 
+After running all the four models, we can compare LOOIC values. When the analysis has been done for the specified maximum age and the number of age groups, load the results.
+
 ```{r}
 # model names - make sure these match with the order of looic below
+model.names <- c("q_phi", "q_phit", "qt_phi", "qt_phit")
 if (!file.exists(out.filename)){
-  model.names <- c("q_phi", "q_phit", "qt_phi", "qt_phit")
   looic <- c(loo_q_phi$estimates["looic", "Estimate"],
              loo_q_phit$estimates["looic", "Estimate"],
              loo_qt_phi$estimates["looic", "Estimate"],
@@ -168,12 +169,7 @@ if (!file.exists(out.filename)){
   
   models <- list(mod_q_phi, mod_q_phit, mod_qt_phi, mod_qt_phit)
   loos <- list(loo_q_phi, loo_q_phit, loo_qt_phi, loo_qt_phit)
-}
-```
-
-When the analysis has been done for the specified maximum age and the number of age groups, load the results.
-```{r}
-if (file.exists(out.filename)){
+} else {
   run.results <- readRDS(file = paste0("RData/DcJuvePhi_maxAge_", 
                                        max.age, "_nAges_", n.ages, ".rds"))
   loos <- run.results$loo
@@ -182,7 +178,8 @@ if (file.exists(out.filename)){
              loos$qt_phi$estimates["looic", "Estimate"],
              loos$qt_phit$estimates["looic", "Estimate"])
   models <- run.results$mods
-
+  best.model.name <- model.names[looic == min(looic)]
+  
 }
 ```
 
@@ -193,10 +190,16 @@ loos[looic == min(looic)]
 
 ```
 
-All k values are unacceptably high, indicating incorrect model specification or outliers.  Not very encouraging... maybe a longer dataset may alleviate this problem. We can look at which data points are problematic by plotting the loo results.
+Some k values are unacceptably high, indicating incorrect model specification or outliers. For some max_age-n_ages combinations, all k statistics are > 0.7. Not very encouraging... maybe a longer dataset may alleviate this problem. We can look at which data points are problematic by plotting the loo results.
 
 ```{r}
-plot(loos$q_phit)
+# this is not quite working... if the runs were from a previous analysis, i.e., file.exist() is TRUE, it needs to be loos$q_phit. If models were run now, then it should be loos[looic == min(loos)]
+if (file.exists(out.filename)){
+  plot(loos$q_phit)  
+} else {
+  plot(loos[[which(looic == min(looic))]])
+}
+
 ```
 
 For now, I'll just go ahead and use this. 
@@ -205,7 +208,7 @@ Even though the model may not be appropriate for the data, convergence of chains
 ```{r}
 model.best <- models[looic == min(looic)][[1]]
 traceplot(model.best, 
-          pars = c("q[1]", "q[2]", "q[3]")) #, "q[1,4]"))
+          pars = c("q[1, 1]", "q[1, 2]", "q[1,3]")) #, "q[1,4]"))
 
 ```
 
@@ -222,6 +225,8 @@ Here are the estimated parameters for the best model.
 ```{r}
 print(model.best)
 ```
+
+Seems like q[t,1] or q[t,2] may have higher mean values... maybe good to look at younger maturation ages? 
 
 To see just relevant parameters in the model, we can extract them.
 ```{r}
@@ -254,7 +259,7 @@ mus2$year <- factor(mus2$year, hatch.yrs)
 # then the observed counts here:
 obs.H <- data.frame(year = hatch.yrs, H = H)
 
-p.qt.phi <- ggplot() + 
+p.best.model <- ggplot() + 
   geom_boxplot(data = mus2,
                aes(x = year, 
                    y = log_hatchlings)) + 
@@ -264,12 +269,13 @@ p.qt.phi <- ggplot() +
              color = "red", size = 3)+ 
   labs(x = "", y = "ln(hatchlings)")
 
-print(p.qt.phi)
+print(p.best.model)
 if (save.fig)
-  ggsave(filename = paste0("figures/logHatch_qt_phi_maxAge_", 
+  ggsave(filename = paste0("figures/logHatch_", best.model.name, 
+                           "_maxAge_", 
                            max.age, "_nAges_", n.ages, ".png"),
          device = "png", dpi = 600,
-         plot = p.qt.phi)
+         plot = p.best.model)
 
 if (save.results){
   out.list <- list(mods = list(q_phi = mod_q_phi,
