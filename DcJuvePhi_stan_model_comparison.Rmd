@@ -1,0 +1,43 @@
+---
+title: "Model comparison"
+output: html_notebook
+---
+
+In this document, I compare models that were run for estimating the juvenile survival rates and age at first reproduction for the St Croix leatherback turtle females. A various sets of age groups were analyzed using DcJuvePhi_stan.Rmd. Outputs were saved in .rds files. Because data were the same for all analyses (a various combinations of maximum age and the number of age groups), they should be comparable using looic values. 
+
+```{r}
+rm(list=ls())
+library(rstan)
+library(loo)
+library(tidyverse)
+library(bayesplot)
+library(ggplot2)
+
+```
+
+First find all results files and bring them in one at a time and name them correctly.
+
+```{r}
+files <- list.files(path = "RData/", 
+                    pattern = "DcJuvePhi_maxAge_")
+
+looic.estimate <- looic.SE <- matrix(nrow = length(files), ncol = 4)
+
+k <- 1
+for (k in 1:length(files)){
+  
+  run.results <- readRDS(file = paste0(path = "RData/", files[k]))
+  loos <- run.results$loo
+  looic.estimate[k,] <- c(loos$q_phi$estimates["looic", "Estimate"],
+                          loos$q_phit$estimates["looic", "Estimate"],
+                          loos$qt_phi$estimates["looic", "Estimate"],
+                          loos$qt_phit$estimates["looic", "Estimate"])
+
+  looic.SE[k,] <- c(loos$q_phi$estimates["looic", "SE"],
+                    loos$q_phit$estimates["looic", "SE"],
+                    loos$qt_phi$estimates["looic", "SE"],
+                    loos$qt_phit$estimates["looic", "SE"])
+  
+}
+```
+
