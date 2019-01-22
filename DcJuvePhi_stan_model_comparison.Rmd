@@ -15,9 +15,9 @@ library(ggplot2)
 
 ```
 
-First find all results files and bring them in one at a time and name them correctly.
+First find all results files and bring them in one at a time and name them correctly. This chunk requires a bit to run, turn on cache. 
 
-```{r}
+```{r cache=TRUE}
 files <- list.files(path = "RData/", 
                     pattern = "DcJuvePhi_maxAge_")
 
@@ -26,7 +26,7 @@ looic.estimate <- looic.SE <- matrix(nrow = length(files), ncol = 4)
 k <- 1
 for (k in 1:length(files)){
   
-  run.results <- readRDS(file = paste0(path = "RData/", files[k]))
+  run.results <- readRDS(file = paste0("RData/", files[k]))
   loos <- run.results$loo
   looic.estimate[k,] <- c(loos$q_phi$estimates["looic", "Estimate"],
                           loos$q_phit$estimates["looic", "Estimate"],
@@ -40,4 +40,90 @@ for (k in 1:length(files)){
   
 }
 ```
+
+Minimum looic is at the last one with qt_phi (time-dependent proportions that mature at different ages and a constant survival rate). Looic values decrease steadily as the maxAge increases. The last one (as of January 2019) is 17 years with 5 age groups (13-17 years old). It's possible that with a longer dataset, we may get to go higher. The difference in looic values between q_phi and qt_phi models shrink with the maxAge. For example, at maxAge = 10, the difference was more than 11. The difference became less than 4 when maxAge = 17. The models with time-dependent survival rates were not as good according to looic values. 
+
+```{r}
+# Find the row and column indices of the minimum
+best.model.idx <- which(looic.estimate == min(looic.estimate),
+                        arr.ind = TRUE)
+
+# we are really interested in the row index to bring back the output
+best.results <- readRDS(file = paste0("RData/", files[best.model.idx[1]]))
+
+# model name:
+best.name <- files[best.model.idx[1]]
+
+# and take a look at pareto k values
+loos <- best.results$loo
+looic <- c(loos$q_phi$estimates["looic", "Estimate"],
+           loos$q_phit$estimates["looic", "Estimate"],
+           loos$qt_phi$estimates["looic", "Estimate"],
+           loos$qt_phit$estimates["looic", "Estimate"])
+plot(loos[[which(looic == min(looic))]])
+```
+
+Some of them are okay and a few are not... 
+
+Because of the higher maxAge value, the posterior of the annual survival rate is pretty high. 
+
+```{r}
+models <- best.results$mods
+model.best <- models[looic == min(looic)][[1]]
+
+draws.df <- as.data.frame(model.best)
+bayesplot::mcmc_dens(draws.df, pars = "phi")
+```
+
+The proportions that mature at different ages for cohorts:
+
+```{r}
+bayesplot::mcmc_dens(draws.df, pars = c("q[1,1]", "q[1,2]", 
+                                        "q[1,3]", "q[1,4]", "q[1,5]"))
+```
+
+```{r}
+bayesplot::mcmc_dens(draws.df, pars = c("q[2,1]", "q[2,2]", 
+                                        "q[2,3]", "q[2,4]", "q[2,5]"))
+```
+
+```{r}
+bayesplot::mcmc_dens(draws.df, pars = c("q[3,1]", "q[3,2]", 
+                                        "q[3,3]", "q[3,4]", "q[3,5]"))
+```
+
+None of these seem to be any different from the equal proportions... so, this probably does not do any better than a constant q values. Let's take a look at q_phi results. 
+
+```{r}
+model.second <- models[1][[1]]
+# and take a look at pareto k values
+plot(loos[[1]])
+
+```
+
+```{r}
+draws.df <- as.data.frame(model.second)
+bayesplot::mcmc_dens(draws.df, pars = "phi")
+```
+
+This posterior is a tiny bit wider but not that much. 
+
+```{r}
+bayesplot::mcmc_dens(draws.df, pars = c("q[1]", "q[2]", 
+                                        "q[3]", "q[4]", "q[5]"))
+```
+
+And these look very similar to those from the qt_phi models. So, why not make things simpler? 
+
+```{r}
+q_phi_summary <- summary(model.second, 
+                         pars = c("phi", "q"),
+                         probs = c(0.025, 0.5, 0.975))$summary
+
+print(q_phi_summary)
+```
+
+So, here it is. The average survival rate of juveniles is 0.75 with 95% CI of 0.72 - 0.78. And the proportions that mature at ages 13 - 17 are 0.13 (0.003 - 0.46), 0.27 (0.01 - 0.66), 0.16 (0.005 - 0.50), 0.20 (0.01 - 0.56), and 0.24 (0.01 - 0.62), respectively.
+
+
 
