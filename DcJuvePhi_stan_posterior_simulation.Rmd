@@ -89,5 +89,45 @@ ggplot() +
   labs(x = "Year", y = "log(Neophytes)")
 ```
 
-Not sure if I want to call this "good" or "bad". Because of the large maximum age at first reproduction (17), only 11 data points can be compared. A qualitative comparison between the observed and simulated data look "okay"... but not super exciting either. 
+Not sure if I want to call this "good" or "bad". Because of the large maximum age at first reproduction (17), only 11 data points can be compared. A qualitative comparison between the observed and simulated data looks "okay"... but not super exciting either. 
+
+
+What if we use the more complicated qt_phi output?
+
+```{r}
+all.out <- readRDS(file = "RData/DcJuvePhi_maxAge_17_nAges_5.rds") 
+model.qt_phi <- all.out$mods$qt_phi
+draws.df.qt_phi <- as.data.frame(model.qt_phi)
+
+neophytes.qt_phi <- data.frame(Year = NA,
+                        Neophytes = NA,
+                        sample = NA)
+
+r <- y <- i <- k <- 1 # nrow(draws.df)
+
+# take first 1000 or take a random sample of 1000:
+set.seed(123)
+idx <- sort(sample.int(n = nrow(draws.df.qt_phi),
+                       size = 1000, replace = FALSE))
+
+for (i in 1:length(idx)){
+  tmp <- data.frame(Year = (min.yr + min.age) : max.sim.yr,
+                    Neophytes = 0,
+                    sample = idx[i])
+  # these mature at ages min.age to max.age
+  qs <- draws.df.qt_phi[idx[i], c("q[1]", "q[2]", "q[3]", "q[4]", "q[5]")]
+  phi <- (draws.df[idx[i], "phi"]) ^ c(min.age:max.age)
+  for (k in 1:nrow(dat.1)){
+    n.mature <- qs * dat.1[k, "Hatchlings"] * phi
+    yrs <- dat.1[k, "Year"] + c(min.age:max.age)
+    for ( y in 1:length(yrs)){
+      tmp[tmp$Year == yrs[y], "Neophytes"] <- tmp[tmp$Year == yrs[y], "Neophytes"] + n.mature[1, y]
+    }
+  }
+
+  neophytes[r:(r+nrows.tmp-1), ] <- tmp
+  r <- r + nrows.tmp
+}
+
+```
 
