@@ -125,6 +125,7 @@ q_phi_summary <- summary(model.second,
 print(q_phi_summary)
 ```
 
+*NOte - the following values change with different runs... pull out automatically (1/31/2019)
 So, here it is. The average survival rate of juveniles is 0.75 with 95% CI of 0.72 - 0.78. And the proportions that mature at ages 13 - 17 are 0.13 (0.003 - 0.46), 0.27 (0.01 - 0.66), 0.16 (0.005 - 0.50), 0.20 (0.01 - 0.56), and 0.24 (0.01 - 0.62), respectively.
 
 Save the results to a file so the posterior simulation can be done.
@@ -134,7 +135,7 @@ Save the results to a file so the posterior simulation can be done.
 # the model with max age and number of age classes for age at first reproduction. These two 
 # bits of information are needed for simulations
 
-out.list <- list(stan.out = model.second,
+out.list <- list(stan.out = best.results,
                  model.str = best.name)
 saveRDS(out.list, file = "RData/model_output_for_post_sim.RDS")
 ```

@@ -33,9 +33,9 @@ dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # maximum age of first reproduction - increasing this number reduces the size 
 # of available data points. 
-max.age <- 17  #12
+max.age <- 13  #12
 # the numberof age classes for the first reproduction 
-n.ages <- 5   # the number of age groups, given the max above. 
+n.ages <- 4   # the number of age groups, given the max above. 
 
 min.age <- max.age - n.ages + 1
 
@@ -49,17 +49,17 @@ if (file.exists(out.filename)){
 }
 
 # set up the data
-max.yr <- dat.0$Year[nrow(dat.0)] - max.age
+max.yr <- max(dat.0$Year) - max.age + 1 # I think +1 is necessary 1/31/2019
 H <- dat.0$Hatchlings[dat.0$Year <= max.yr]
 
-min.yr <- dat.0$Year[1] + min.age
+min.yr <- min(dat.0$Year) + min.age - 1  # I think -1 is necessary 1/31/2019
 # the number of neophytes:
-neophytes <- rev(dat.0$Neophytes[dat.0$Year >= min.yr])
+neophytes <- dat.0$Neophytes[dat.0$Year >= min.yr]
 
 Y <- length(H)  
 hatch.yrs <- dat.0$Year[1:Y]
 
-data_list = list(N = neophytes,
+data_list = list(N = rev(neophytes),
                  Y = Y, 
                  H = rev(H),
                  n_ages = n.ages,

@@ -17,7 +17,7 @@ library(ggplot2)
 Load the results from the appropriate model. Also load the data. 
 ```{r}
 
-model.out <- readRDS(file = "RData/model_output_for_post_sim.RDS")
+best.results <- readRDS(file = "RData/model_output_for_post_sim.RDS")
 dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # remove NAs from the hatchling data
@@ -34,7 +34,16 @@ ages <- c(min.age:max.age)
 Now we extract the posterior samples from the Stan output.
 
 ```{r}
-draws.df <- as.data.frame(model.out$stan.out)
+loos <- best.results$stan.out$loo
+looic <- c(loos$q_phi$estimates["looic", "Estimate"],
+           loos$q_phit$estimates["looic", "Estimate"],
+           loos$qt_phi$estimates["looic", "Estimate"],
+           loos$qt_phit$estimates["looic", "Estimate"])
+
+models <- best.results$stan.out$mods
+model.second.best <- models[rank(looic) == 2][[1]]
+model.second.best.name <- model.second.best@model_name
+draws.df <- as.data.frame(model.second.best)
 ```
 
 Start simulation using the hatchling data. 
@@ -92,42 +101,64 @@ ggplot() +
 Not sure if I want to call this "good" or "bad". Because of the large maximum age at first reproduction (17), only 11 data points can be compared. A qualitative comparison between the observed and simulated data looks "okay"... but not super exciting either. 
 
 
-What if we use the more complicated qt_phi output?
+What if we use the more complicated qt_phi output? That was the best model.
 
 ```{r}
-all.out <- readRDS(file = "RData/DcJuvePhi_maxAge_17_nAges_5.rds") 
-model.qt_phi <- all.out$mods$qt_phi
-draws.df.qt_phi <- as.data.frame(model.qt_phi)
+model.best <- models[rank(looic) == 1][[1]]
+model.best.name <- model.best@model_name
+draws.df.qt_phi <- as.data.frame(model.best)
 
 neophytes.qt_phi <- data.frame(Year = NA,
-                        Neophytes = NA,
-                        sample = NA)
+                               Neophytes = NA,
+                               sample = NA)
 
 r <- y <- i <- k <- 1 # nrow(draws.df)
 
 # take first 1000 or take a random sample of 1000:
 set.seed(123)
 idx <- sort(sample.int(n = nrow(draws.df.qt_phi),
-                       size = 1000, replace = FALSE))
-
+                       size = 1000, 
+                       replace = FALSE))
+max.yr <- max(dat.0$Year)
+nrows.tmp <- length((min.yr + min.age) : (min.yr + min.age + nrow(dat.0)-12+3))
+qs <- draws.df.qt_phi %>% select(contains("q["))
 for (i in 1:length(idx)){
-  tmp <- data.frame(Year = (min.yr + min.age) : max.sim.yr,
+  tmp <- data.frame(Year = (min.yr + min.age) : (min.yr + min.age + nrow(dat.0)-12+3),
                     Neophytes = 0,
                     sample = idx[i])
   # these mature at ages min.age to max.age
-  qs <- draws.df.qt_phi[idx[i], c("q[1]", "q[2]", "q[3]", "q[4]", "q[5]")]
-  phi <- (draws.df[idx[i], "phi"]) ^ c(min.age:max.age)
-  for (k in 1:nrow(dat.1)){
-    n.mature <- qs * dat.1[k, "Hatchlings"] * phi
-    yrs <- dat.1[k, "Year"] + c(min.age:max.age)
-    for ( y in 1:length(yrs)){
-      tmp[tmp$Year == yrs[y], "Neophytes"] <- tmp[tmp$Year == yrs[y], "Neophytes"] + n.mature[1, y]
+  
+  phi <- (draws.df.qt_phi[idx[i], "phi"]) ^ c(min.age:max.age)
+  q_i <- qs[idx[i],]
+  for (k in 1:(nrow(dat.0)-12)){   # 13 (13 - 1 for counting) is the minimum age at maturity: 13-17 yo. may change. 
+    # Each cohort maturing at different ages
+    n.mature <- unlist(c(q_i[paste0("q[", k, ",1]")] * dat.0[k, "Hatchlings"] * phi[5], 
+                         q_i[paste0("q[", k, ",2]")] * dat.0[k, "Hatchlings"] * phi[4],
+                         q_i[paste0("q[", k, ",3]")] * dat.0[k, "Hatchlings"] * phi[3],
+                         q_i[paste0("q[", k, ",4]")] * dat.0[k, "Hatchlings"] * phi[2],
+                         q_i[paste0("q[", k, ",5]")] * dat.0[k, "Hatchlings"] * phi[1]))
+    
+    for (y in 1:length(n.mature)){
+      tmp[k + y - 1, "Neophytes"] <- tmp[k + y - 1, "Neophytes"] + n.mature[y]
     }
+    
   }
-
-  neophytes[r:(r+nrows.tmp-1), ] <- tmp
+  neophytes.qt_phi[r:(r+nrows.tmp-1), ] <- tmp
   r <- r + nrows.tmp
 }
 
+```
+
+
+```{r}
+dat.2 <- filter(dat.0, Year >= min(tmp$Year))
+ggplot() + 
+  geom_boxplot(data = neophytes.qt_phi,
+             aes(x = as.factor(Year), 
+                 y = log(Neophytes)))  +
+  geom_point(dat = dat.2,
+             aes(x = as.factor(Year), y = log(Neophytes)),
+             color = "red") + 
+  labs(x = "Year", y = "log(Neophytes)")
 ```
 
