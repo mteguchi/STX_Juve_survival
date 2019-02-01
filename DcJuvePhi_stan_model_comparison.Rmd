@@ -78,8 +78,9 @@ bayesplot::mcmc_dens(draws.df, pars = "phi")
 The proportions that mature at different ages for cohorts:
 
 ```{r}
-bayesplot::mcmc_dens(draws.df, pars = c("q[1,1]", "q[1,2]", 
-                                        "q[1,3]", "q[1,4]", "q[1,5]"))
+bayesplot::mcmc_dens(draws.df, 
+                     pars = c("q[1,1]", "q[1,2]", 
+                              "q[1,3]", "q[1,4]", "q[1,5]"))
 ```
 
 ```{r}

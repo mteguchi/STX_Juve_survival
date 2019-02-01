@@ -5,6 +5,7 @@ output: html_notebook
 
 ```{r message=FALSE, echo=FALSE}
 rm(list=ls())
+source("C:/Users/tomo.eguchi/Documents/R/tools/TomosFunctions.R")
 library(rstan)
 library(loo)
 library(tidyverse)
@@ -33,9 +34,9 @@ dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # maximum age of first reproduction - increasing this number reduces the size 
 # of available data points. 
-max.age <- 13  #12
+max.age <- 16  #12
 # the numberof age classes for the first reproduction 
-n.ages <- 4   # the number of age groups, given the max above. 
+n.ages <- 5   # the number of age groups, given the max above. 
 
 min.age <- max.age - n.ages + 1
 
