@@ -5,7 +5,7 @@ output: html_notebook
 
 ```{r message=FALSE, echo=FALSE}
 rm(list=ls())
-source("C:/Users/tomo.eguchi/Documents/R/tools/TomosFunctions.R")
+#source("C:/Users/tomo.eguchi/Documents/R/tools/TomosFunctions.R")
 library(rstan)
 library(loo)
 library(tidyverse)
