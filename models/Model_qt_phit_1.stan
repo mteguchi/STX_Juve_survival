@@ -34,11 +34,6 @@ transformed parameters {
 		}
 		mu[i] = log(tmp);
 
-		/*mu[i] = log(q[i, 1] * N[i] * pow(phi[i],-9) + 
-		             q[i+1, 2] * N[i+1] * pow(phi[i],-10) +
-		             q[i+2, 3] * N[i+2] * pow(phi[i],-11) + 
-		             q[i+3, 4] * N[i+3] * pow(phi[i],-12)); */
-
 	}	
 
 	

@@ -34,12 +34,6 @@ transformed parameters {
 			tmp += q[i + j -1, j] * N[i + j -1] * pow(phi, -(max_age - j + 1));		
 		}
 		mu[i] = log(tmp);
-		/* mu[i] = log(q[i, 1] * N[i] * pow(phi,-12) +
-						q[i, 2] * N[i+1] * pow(phi,-11) +
-						q[i, 3] * N[i+2] * pow(phi,-10) + 
-		             q[i,4] * N[i+3] * pow(phi,-9) +
-		             q[i,5] * N[i+4] * pow(phi,-8) + 
-		             q[i,6] * N[i+5] * pow(phi,-7));  */
 
 	}	
 
