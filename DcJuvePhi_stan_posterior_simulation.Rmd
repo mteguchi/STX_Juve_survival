@@ -17,7 +17,7 @@ library(ggplot2)
 Load the results from the appropriate model. Also load the data. 
 ```{r}
 
-best.results <- readRDS(file = "RData/model_output_for_post_sim.RDS")
+best.results <- readRDS(file = "RData/model_output_for_post_sim.rds")
 dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 
 # remove NAs from the hatchling data
@@ -74,7 +74,8 @@ for (i in 1:length(idx)){
     n.mature <- qs * dat.1[k, "Hatchlings"] * phi
     yrs <- dat.1[k, "Year"] + c(min.age:max.age)
     for ( y in 1:length(yrs)){
-      tmp[tmp$Year == yrs[y], "Neophytes"] <- tmp[tmp$Year == yrs[y], "Neophytes"] + n.mature[1, y]
+      tmp[tmp$Year == yrs[y], "Neophytes"] <- tmp[tmp$Year == yrs[y],
+                                                  "Neophytes"] + n.mature[1, y]
     }
   }
 
@@ -130,13 +131,19 @@ for (i in 1:length(idx)){
   
   phi <- (draws.df.qt_phi[idx[i], "phi"]) ^ c(min.age:max.age)
   q_i <- qs[idx[i],]
-  for (k in 1:(nrow(dat.0)-12)){   # 13 (13 - 1 for counting) is the minimum age at maturity: 13-17 yo. may change. 
+  # 13 (13 - 1 for counting) is the minimum age at maturity: 13-17 yo. may change.
+  for (k in 1:(nrow(dat.0)-13)){    
     # Each cohort maturing at different ages
-    n.mature <- unlist(c(q_i[paste0("q[", k, ",1]")] * dat.0[k, "Hatchlings"] * phi[5], 
-                         q_i[paste0("q[", k, ",2]")] * dat.0[k, "Hatchlings"] * phi[4],
-                         q_i[paste0("q[", k, ",3]")] * dat.0[k, "Hatchlings"] * phi[3],
-                         q_i[paste0("q[", k, ",4]")] * dat.0[k, "Hatchlings"] * phi[2],
-                         q_i[paste0("q[", k, ",5]")] * dat.0[k, "Hatchlings"] * phi[1]))
+    n.mature <- unlist(c(q_i[paste0("q[", k, ",1]")] * 
+                           dat.0[k, "Hatchlings"] * phi[5], 
+                         q_i[paste0("q[", k, ",2]")] * 
+                           dat.0[k, "Hatchlings"] * phi[4],
+                         q_i[paste0("q[", k, ",3]")] * 
+                           dat.0[k, "Hatchlings"] * phi[3],
+                         q_i[paste0("q[", k, ",4]")] * 
+                           dat.0[k, "Hatchlings"] * phi[2],
+                         q_i[paste0("q[", k, ",5]")] * 
+                           dat.0[k, "Hatchlings"] * phi[1]))
     
     for (y in 1:length(n.mature)){
       tmp[k + y - 1, "Neophytes"] <- tmp[k + y - 1, "Neophytes"] + n.mature[y]

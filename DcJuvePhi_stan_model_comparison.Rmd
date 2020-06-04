@@ -138,7 +138,7 @@ Save the results to a file so the posterior simulation can be done.
 
 out.list <- list(stan.out = best.results,
                  model.str = best.name)
-saveRDS(out.list, file = "RData/model_output_for_post_sim.RDS")
+saveRDS(out.list, file = "RData/model_output_for_post_sim.rds")
 ```
 
 
