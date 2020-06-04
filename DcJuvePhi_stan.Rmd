@@ -182,7 +182,16 @@ if (!file.exists(out.filename)){
   best.model.name <- model.names[looic == min(looic)]
   
 }
+
+looic
 ```
+
+Find the best model name:
+
+```{r}
+model.names[looic == min(looic)]
+```
+
 
 According to the looic values, the best model is qt_phi. Look at how Pareto-k statitsics look for this model. This result shows the posterior predictive accuracy of the model.  
 
@@ -191,7 +200,7 @@ loos[looic == min(looic)]
 
 ```
 
-Some k values are unacceptably high, indicating incorrect model specification or outliers. For some max_age-n_ages combinations, all k statistics are > 0.7. Not very encouraging... maybe a longer dataset may alleviate this problem. We can look at which data points are problematic by plotting the loo results.
+Some k values are unacceptably high (bad for 2), indicating possible incorrect model specification or outliers. Maybe a longer dataset may alleviate this problem. We can look at which data points are problematic by plotting the loo results.
 
 ```{r}
 # plot the loo results 
@@ -202,6 +211,7 @@ plot(loos[[which(looic == min(looic))]])
 For now, I'll just go ahead and use this. 
 
 Even though the model may not be appropriate for the data, convergence of chains can be seen from trace plots. For example...
+
 ```{r}
 model.best <- models[looic == min(looic)][[1]]
 if (length(grep("qt", best.model.name)) > 0){
