@@ -24,8 +24,21 @@ dat.0 <- read.csv(file = "data/hatchling and neophytes.csv")
 dat.1 <- na.omit(dat.0)
 
 # define the following parameters based on model.out$model.str
-max.age <- 17
-n.ages <- 5
+
+max.age <- out.list$model.str %>% 
+  str_split("_") %>% 
+  unlist() %>% 
+  purrr::pluck(3)%>%
+  as.numeric()
+
+n.ages <- out.list$model.str %>% 
+  str_split("_") %>% 
+  unlist() %>% 
+  purrr::pluck(5) %>%
+  str_split(".rds") %>%
+  unlist()%>%
+  purrr::pluck(1)%>%
+  as.numeric()
 
 min.age <- max.age - n.ages + 1
 ages <- c(min.age:max.age)
@@ -61,14 +74,18 @@ r <- y <- i <- k <- 1 # nrow(draws.df)
 # take first 1000 or take a random sample of 1000:
 set.seed(123)
 idx <- sort(sample.int(n = nrow(draws.df),
-                       size = 1000, replace = FALSE))
+                       size = 1000, 
+                       replace = FALSE))
 
 for (i in 1:length(idx)){
   tmp <- data.frame(Year = (min.yr + min.age) : max.sim.yr,
                     Neophytes = 0,
                     sample = idx[i])
+  
   # these mature at ages min.age to max.age
-  qs <- draws.df[idx[i], c("q[1]", "q[2]", "q[3]", "q[4]", "q[5]")]
+  draws.df %>% select(starts_with("q[")) %>% slice(idx[i]) -> qs
+  
+  #qs <- draws.df[idx[i], c("q[1]", "q[2]", "q[3]", "q[4]", "q[5]")]
   phi <- (draws.df[idx[i], "phi"]) ^ c(min.age:max.age)
   for (k in 1:nrow(dat.1)){
     n.mature <- qs * dat.1[k, "Hatchlings"] * phi
@@ -123,6 +140,7 @@ idx <- sort(sample.int(n = nrow(draws.df.qt_phi),
 max.yr <- max(dat.0$Year)
 nrows.tmp <- length((min.yr + min.age) : (min.yr + min.age + nrow(dat.0)-12+3))
 qs <- draws.df.qt_phi %>% select(contains("q["))
+
 for (i in 1:length(idx)){
   tmp <- data.frame(Year = (min.yr + min.age) : (min.yr + min.age + nrow(dat.0)-12+3),
                     Neophytes = 0,

@@ -102,7 +102,7 @@ plot(loos[[1]])
 
 ```
 
-Not that much better than qt_phi... 
+Maybe a bit better than qt_phi... 
 
 ```{r}
 draws.df <- as.data.frame(model.second)
